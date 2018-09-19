@@ -105,8 +105,16 @@ boot_alloc(uint32_t n)
 	// to a multiple of PGSIZE.
 	//
 	// LAB 2: Your code here.
-
-	return NULL;
+	/*if (no tengo mas memoria)
+		panic("boot_alloc: no more free memory");*/
+	result = nextfree;
+	for (int i = 0; i < n; i++){ //primer multiplo de 12 mayor que n
+		nextfree += 4096;
+		if (nextfree == 0xffffff)  //no se donde frenar
+			panic("boot_alloc: not enough memory");
+	}
+		
+	return result;
 }
 
 // Set up a two-level page table:
@@ -153,7 +161,8 @@ mem_init(void)
 	// memset
 	// to initialize all fields of each struct PageInfo to 0.
 	// Your code goes here:
-
+	pages = (struct PageInfo *) boot_alloc(npages*sizeof(struct PageInfo));
+	memset(pages, 0, npages*sizeof(struct PageInfo));
 
 	//////////////////////////////////////////////////////////////////////
 	// Now that we've allocated the initial kernel data structures, we set
@@ -258,6 +267,9 @@ page_init(void)
 	// free pages!
 	size_t i;
 	for (i = 0; i < npages; i++) {
+		if ((i == 0)||((i >= 160)&&(i < /*DONDE TERMINA REGION USADA POR BOOT ALLOC*/)){
+			continue;
+		}
 		pages[i].pp_ref = 0;
 		pages[i].pp_link = page_free_list;
 		page_free_list = &pages[i];
@@ -293,6 +305,9 @@ page_free(struct PageInfo *pp)
 	// Fill this function in
 	// Hint: You may want to panic if pp->pp_ref is nonzero or
 	// pp->pp_link is not NULL.
+	if ((pp->pp_ref != 0)||(pp->pp_link != NULL))
+		panic("page_free: failed!");
+	page_free_list->pp_link = pp->pp_link; //no se si esta bien
 }
 
 //
