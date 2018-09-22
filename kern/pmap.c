@@ -107,14 +107,19 @@ boot_alloc(uint32_t n)
 	// LAB 2: Your code here.
 	/*if (no tengo mas memoria)
 		panic("boot_alloc: no more free memory");*/
-	result = nextfree;
-	for (int i = 0; i < n; i++){ //primer multiplo de 12 mayor que n
-		nextfree += 4096;
-		if (nextfree == 0xffffff)  //no se donde frenar
+	if (n != 0){
+		// n = bytes to complete pages
+		n = ROUNDUP(n, PGSIZE);
+
+		//opcion mas linda
+		if (PGNUM(PADDR(nextfree + n)) >= npages){
+		//if ((size_t)nextfree + n >= npages * PGSIZE + KERNBASE){
 			panic("boot_alloc: not enough memory");
+		}
+		nextfree = nextfree + n;
 	}
 		
-	return result;
+	return nextfree;
 }
 
 // Set up a two-level page table:
@@ -136,7 +141,7 @@ mem_init(void)
 	i386_detect_memory();
 
 	// Remove this line when you're ready to test this function.
-	panic("mem_init: This function is not finished\n");
+	//panic("mem_init: This function is not finished\n");
 
 	//////////////////////////////////////////////////////////////////////
 	// create initial page directory.
@@ -267,9 +272,9 @@ page_init(void)
 	// free pages!
 	size_t i;
 	for (i = 0; i < npages; i++) {
-		if ((i == 0)||((i >= 160)&&(i < /*DONDE TERMINA REGION USADA POR BOOT ALLOC*/)){
-			continue;
-		}
+		//if ((i == 0)||((i >= 160)&&(i < /*DONDE TERMINA REGION USADA POR BOOT ALLOC*/)){
+		//	continue;
+		//}
 		pages[i].pp_ref = 0;
 		pages[i].pp_link = page_free_list;
 		page_free_list = &pages[i];
