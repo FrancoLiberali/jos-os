@@ -112,7 +112,7 @@ boot_alloc(uint32_t n)
 		n = ROUNDUP(n, PGSIZE);
 
 		//opcion mas linda
-		if (PGNUM(PADDR(nextfree + n)) >= npages){
+		if (PGNUM(PADDR(nextfree + n)) > npages){// o >=
 		//if ((size_t)nextfree + n >= npages * PGSIZE + KERNBASE){
 			panic("boot_alloc: not enough memory");
 		}
@@ -275,6 +275,12 @@ page_init(void)
 		//if ((i == 0)||((i >= 160)&&(i < /*DONDE TERMINA REGION USADA POR BOOT ALLOC*/)){
 		//	continue;
 		//}
+		if ((i == 0) ||
+		 (i >= PGNUM(IOPHYSMEM) && (i < PGNUM(EXTPHYSMEM))) ||
+		 (i >= PGNUM(EXTPHYSMEM) && (i < PGNUM(PADDR(boot_alloc(0))))))
+		 {
+			continue;
+		}
 		pages[i].pp_ref = 0;
 		pages[i].pp_link = page_free_list;
 		page_free_list = &pages[i];
