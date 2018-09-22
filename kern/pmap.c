@@ -107,6 +107,7 @@ boot_alloc(uint32_t n)
 	// LAB 2: Your code here.
 	/*if (no tengo mas memoria)
 		panic("boot_alloc: no more free memory");*/
+	result = nextfree;
 	if (n != 0){
 		// n = bytes to complete pages
 		n = ROUNDUP(n, PGSIZE);
@@ -119,7 +120,7 @@ boot_alloc(uint32_t n)
 		nextfree = nextfree + n;
 	}
 		
-	return nextfree;
+	return result;
 }
 
 // Set up a two-level page table:
@@ -279,9 +280,10 @@ page_init(void)
 		 (i >= PGNUM(IOPHYSMEM) && (i < PGNUM(EXTPHYSMEM))) ||
 		 (i >= PGNUM(EXTPHYSMEM) && (i < PGNUM(PADDR(boot_alloc(0))))))
 		 {
+			//pages[i].pp_ref = 1;
 			continue;
 		}
-		pages[i].pp_ref = 0;
+		//pages[i].pp_ref = 0;
 		pages[i].pp_link = page_free_list;
 		page_free_list = &pages[i];
 	}
