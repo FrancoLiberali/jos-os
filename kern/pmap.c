@@ -472,10 +472,10 @@ page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 		return -E_NO_MEM;
 	}
 	// If there is already a page mapped at 'va'
-	if (*pte){
+	if ((*pte & PTE_P)){
 		page_remove(pgdir, va);
 	}
-	*pte = PTE_ADDR(page2pa(pp)) & (perm|PTE_P);
+	*pte = PTE_ADDR(page2pa(pp)) | (perm|PTE_P);
 	pp->pp_ref++;
 	return 0;
 }
