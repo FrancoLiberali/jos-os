@@ -273,9 +273,6 @@ page_init(void)
 	// free pages!
 	size_t i;
 	for (i = 0; i < npages; i++) {
-		//if ((i == 0)||((i >= 160)&&(i < /*DONDE TERMINA REGION USADA POR BOOT ALLOC*/)){
-		//	continue;
-		//}
 		if ((i == 0) ||
 		 (i >= PGNUM(IOPHYSMEM) && (i < PGNUM(EXTPHYSMEM))) ||
 		 (i >= PGNUM(EXTPHYSMEM) && (i < PGNUM(PADDR(boot_alloc(0))))))
@@ -332,7 +329,6 @@ page_free(struct PageInfo *pp)
 		panic("page_free: failed!");
 	pp->pp_link = page_free_list; 
 	page_free_list = pp;
-	//page_free_list->pp_link = pp->pp_link; //no se si esta bien
 }
 
 //
@@ -371,8 +367,58 @@ page_decref(struct PageInfo *pp)
 pte_t *
 pgdir_walk(pde_t *pgdir, const void *va, int create)
 {
-	// Fill this function in
-	return NULL;
+	//pte_t* pte = (pte_t*) pgdir[(int)PDX(va)];
+	//physaddr_t pte = (physaddr_t) pgdir[(int)PDX(va)];
+	//if (pte & PTE_P){ //& *pde){
+	//if ((int)pte & PTE_P){
+		//to virtual adress
+		//return &(pte[PTX(va)]);
+		//return page2kva(pa2page(pte)) + PTX(va);
+		//return ((pte_t*) &(pte[PTX(va)]));
+	//}
+	pte_t *p;
+	pgdir = &pgdir[PDX(va)];
+	if ((*pgdir & PTE_P)){
+		p = (pte_t *) KADDR(PTE_ADDR(*pgdir));
+		return &(p[PTX(va)]);
+	}
+	if (!create){
+		return NULL;
+	}
+	struct PageInfo * nextfree = page_alloc(ALLOC_ZERO);
+	if (!nextfree){
+		return NULL;
+	}
+	nextfree->pp_ref++;
+	*pgdir = page2pa(nextfree) | PTE_P;
+	p = (pte_t *) KADDR(PTE_ADDR(*pgdir));
+	return &(p[PTX(va)]);
+	//pgdir[(int)PDX(va)] = page2pa(nextfree) | PTE_P;
+	//pte = (pte_t*) pgdir[(int)PDX(va)];
+	//return KADDR(&(pte[PTX(va)]));
+	//return &(pte[PTX(va)]);
+	//return page2kva(nextfree) + 4 * PTX(va);
+
+	/*static physaddr_t
+check_va2pa(pde_t *pgdir, uintptr_t va)
+{
+	pte_t *p;
+
+	pgdir = &pgdir[PDX(va)];
+	if (!(*pgdir & PTE_P))
+		return ~0;
+	if (*pgdir & PTE_PS)
+		return (physaddr_t) PGADDR(PDX(*pgdir), PTX(va), PGOFF(va));
+	p = (pte_t *) KADDR(PTE_ADDR(*pgdir));
+	if (!(p[PTX(va)] & PTE_P))
+		return ~0;
+	return PTE_ADDR(p[PTX(va)]);
+}*/
+
+	
+	//pte = (pte_t*) page2kva(nextfree);
+	//return ((pte_t*) &(pte[PTX(va)]));
+	//return ((pte_t*) (*pde + PTX(va)));
 }
 
 //
@@ -420,7 +466,17 @@ boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm
 int
 page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 {
-	// Fill this function in
+	pte_t* pte = pgdir_walk(pgdir, va, true);
+	//if page table couldn't be allocated
+	if (!pte){
+		return -E_NO_MEM;
+	}
+	// If there is already a page mapped at 'va'
+	if (*pte){
+		page_remove(pgdir, va);
+	}
+	*pte = PTE_ADDR(page2pa(pp)) & (perm|PTE_P);
+	pp->pp_ref++;
 	return 0;
 }
 
@@ -438,8 +494,16 @@ page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 struct PageInfo *
 page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
 {
-	// Fill this function in
-	return NULL;
+	pte_t* pte = pgdir_walk(pgdir, va, false);
+	if (!pte || !(*pte)){
+		return NULL;
+	}
+	if (pte_store){
+		*pte_store = pte;
+	}
+	physaddr_t pa = PTE_ADDR(*pte) + PGOFF(va);
+	//physaddr_t pa = (physaddr_t) PGADDR(PDX(*pte), PTX(*pte), PGOFF(va));
+	return pa2page(pa);
 }
 
 //
@@ -459,8 +523,14 @@ page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
 //
 void
 page_remove(pde_t *pgdir, void *va)
-{
-	// Fill this function in
+{	
+	pte_t** pte_pp = (pte_t**) 0x1;
+	struct PageInfo* pp = page_lookup(pgdir, va, pte_pp);
+	if (pp){
+		**pte_pp = 0;
+		tlb_invalidate(pgdir, va);
+		page_decref(pp);
+	}
 }
 
 //
