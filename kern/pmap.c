@@ -367,15 +367,6 @@ page_decref(struct PageInfo *pp)
 pte_t *
 pgdir_walk(pde_t *pgdir, const void *va, int create)
 {
-	//pte_t* pte = (pte_t*) pgdir[(int)PDX(va)];
-	//physaddr_t pte = (physaddr_t) pgdir[(int)PDX(va)];
-	//if (pte & PTE_P){ //& *pde){
-	//if ((int)pte & PTE_P){
-		//to virtual adress
-		//return &(pte[PTX(va)]);
-		//return page2kva(pa2page(pte)) + PTX(va);
-		//return ((pte_t*) &(pte[PTX(va)]));
-	//}
 	pte_t *p;
 	pgdir = &pgdir[PDX(va)];
 	if ((*pgdir & PTE_P)){
@@ -393,32 +384,6 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
 	*pgdir = page2pa(nextfree) | PTE_P;
 	p = (pte_t *) KADDR(PTE_ADDR(*pgdir));
 	return &(p[PTX(va)]);
-	//pgdir[(int)PDX(va)] = page2pa(nextfree) | PTE_P;
-	//pte = (pte_t*) pgdir[(int)PDX(va)];
-	//return KADDR(&(pte[PTX(va)]));
-	//return &(pte[PTX(va)]);
-	//return page2kva(nextfree) + 4 * PTX(va);
-
-	/*static physaddr_t
-check_va2pa(pde_t *pgdir, uintptr_t va)
-{
-	pte_t *p;
-
-	pgdir = &pgdir[PDX(va)];
-	if (!(*pgdir & PTE_P))
-		return ~0;
-	if (*pgdir & PTE_PS)
-		return (physaddr_t) PGADDR(PDX(*pgdir), PTX(va), PGOFF(va));
-	p = (pte_t *) KADDR(PTE_ADDR(*pgdir));
-	if (!(p[PTX(va)] & PTE_P))
-		return ~0;
-	return PTE_ADDR(p[PTX(va)]);
-}*/
-
-	
-	//pte = (pte_t*) page2kva(nextfree);
-	//return ((pte_t*) &(pte[PTX(va)]));
-	//return ((pte_t*) (*pde + PTX(va)));
 }
 
 //
@@ -471,12 +436,20 @@ page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 	if (!pte){
 		return -E_NO_MEM;
 	}
+	// if the same pp is re-inserted at the same virtual 
+	// address in the same pgdir it wont be freed 
+	// because we are advising that it would have other use
+	pp->pp_ref++;
 	// If there is already a page mapped at 'va'
 	if ((*pte & PTE_P)){
 		page_remove(pgdir, va);
 	}
+	// en ningun momento aclara que esto se
+	// deba hacer pero la prueba
+	// "should be able to change permissions too."
+	// lo chequea en su ultima linea
+	pgdir[PDX(va)] = pgdir[PDX(va)] | (perm|PTE_P);
 	*pte = PTE_ADDR(page2pa(pp)) | (perm|PTE_P);
-	pp->pp_ref++;
 	return 0;
 }
 
@@ -495,7 +468,7 @@ struct PageInfo *
 page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
 {
 	pte_t* pte = pgdir_walk(pgdir, va, false);
-	if (!pte || !(*pte)){
+	if (!pte || !(*pte & PTE_P)){
 		return NULL;
 	}
 	if (pte_store){
@@ -524,10 +497,11 @@ page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
 void
 page_remove(pde_t *pgdir, void *va)
 {	
-	pte_t** pte_pp = (pte_t**) 0x1;
-	struct PageInfo* pp = page_lookup(pgdir, va, pte_pp);
+	// trash declaration that will be overwritten by page_lookup
+	pte_t* pte = (pte_t*) 0x1;
+	struct PageInfo* pp = page_lookup(pgdir, va, &pte);
 	if (pp){
-		**pte_pp = 0;
+		*pte = 0;
 		tlb_invalidate(pgdir, va);
 		page_decref(pp);
 	}
