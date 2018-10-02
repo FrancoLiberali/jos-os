@@ -22,11 +22,11 @@ pde_t entry_pgdir[NPDENTRIES] = {
 	// Map VA's [0, 4MB) to PA's [0, 4MB)
 	[0]
 		//= ((uintptr_t)entry_pgtable - KERNBASE) + PTE_P,
-		= ((uintptr_t)0x0) + PTE_PS,
+		= ((uintptr_t)0x0) + PTE_PS + PTE_P,
 	// Map VA's [KERNBASE, KERNBASE+4MB) to PA's [0, 4MB)
 	[KERNBASE>>PDXSHIFT]
 		//= ((uintptr_t)entry_pgtable - KERNBASE) + PTE_P + PTE_W
-		= ((uintptr_t)0x0) + PTE_PS + PTE_W,
+		= ((uintptr_t)0x0) + PTE_PS + PTE_W + PTE_P
 };
 
 // Entry 0 of the page table maps to physical page 0, entry 1 to
