@@ -215,7 +215,7 @@ mem_init(void)
 	// we just set up the mapping anyway.
 	// Permissions: kernel RW, user NONE
 	// Your code goes here:
-	boot_map_region(kern_pgdir, KERNBASE, ~0 - KERNBASE, 0, PTE_W | PTE_P);
+	boot_map_region(kern_pgdir, KERNBASE, ~0 - KERNBASE + 1, 0, PTE_W | PTE_P);
 
 
 	// Check that the initial page directory has been set up correctly.
@@ -416,23 +416,24 @@ boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm
 	}
 #else
 	if (pa % PTSIZE == 0){
-		int i=0;
+		int i = 0;
 		while(size >= PTSIZE){
-			pgdir[PDX(va + i * PTSIZE)] = (pa + i * PTSIZE) | (perm|PTE_PS|PTE_P|PTE_W);
+			pgdir[PDX(va + i * PTSIZE)] = (pa + i * PTSIZE) | (perm|PTE_PS|PTE_P);
 			size -= PTSIZE;
 			i++;
 		}
+		va = va + i * PTSIZE;
 	}
-		int n = ROUNDUP(size, PGSIZE);
-		for (int i = 0; i < n / PGSIZE; i++){
-			pte_t* pte = pgdir_walk(pgdir, (void*)va + i * PGSIZE, true);
-			//if page table couldn't be allocated
-			if (!pte){
-				continue;
-			}
-			pgdir[PDX(va + i * PGSIZE)] = pgdir[PDX(va + i * PGSIZE)] | (perm|PTE_P);
-			*pte = (pa + i * PGSIZE) | (perm|PTE_P);
+	int n = ROUNDUP(size, PGSIZE); // no es necesario porque size es multiplo de PGSIZE
+	for (int i = 0; i < n / PGSIZE; i++){
+		pte_t* pte = pgdir_walk(pgdir, (void*)va + i * PGSIZE, true);
+		//if page table couldn't be allocated
+		if (!pte){
+			continue;
 		}
+		pgdir[PDX(va + i * PGSIZE)] = pgdir[PDX(va + i * PGSIZE)] | (perm|PTE_P);
+		*pte = (pa + i * PGSIZE) | (perm|PTE_P);
+	}
 	
 #endif
 }
