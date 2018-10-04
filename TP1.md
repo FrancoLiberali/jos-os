@@ -65,6 +65,24 @@ page_alloc
 map_region_large
 ----------
 
+	De los tres llamados a boot_map_region, unicamente el ultimo hace uso de large pages ya que en los otros casos la direccion fisica no se encuentra alineada a 22 bits.
 
+En ese llamado, el tamanio que se especifica es: size = 268435456 = 2^28.
 
+Sin utilizar large pages:
+La cantidad de page table entries necesarias para direccionar esa size es: 2^28/2^12 = 2^16 = 65536
+En total, ocupa: 65536pte = 2^16*2^2 = 2^18 = 262144 = 256k bytes
+La cantidad de page tables necesarias para direccionar eso es: 2^16/2^10 = 2^6 = 64
+Al necesitar 64 page tables, se necesitan 64 page directory entries, en total: 64pde = 2^6*2^2 = 2^8 = 256 bytes
+Sumando todo, la cantidad de memoria total necesaria es: 2^18 + 2^8 = 262400 bytes
+
+Utilizando large pages:
+La cantidad de page directory entries necesarias para direccionar esa size es: 2^28/2^22 = 2^6 = 64
+En total, ocupa: 64pde = 2^6*2^2 = 2^8 = 256 bytes
+
+Haciendo la diferencia, se obtiene que 2^18+2^8 - 2^8 = 2^18 = 2^8*2^10 = 256k bytes es la cantidad de memoria que se ahorra utilizando large pages. Este valor corresponde con el tamanio de las page tables que no se utilizan en este modo.
+
+Ademas, al quitar un nivel de indireccion, tambien se liberan cantidad de entradas en la TLB lo cual mejora la performance de las busquedas a memoria.
+
+Es una cantidad fija que no depende de la memoria fisica total de la computadora ya que esta implementacion esta relacionada con la manera de traducir direcciones virtuales a fisicas, no con la cantidad que se quiere alocar.
 
