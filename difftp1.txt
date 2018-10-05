@@ -1,0 +1,406 @@
+diff --git a/.gitignore b/.gitignore
+index 3446039..ce0855a 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -14,3 +14,5 @@
+ /lab?/
+ /sol?/
+ /myapi.key
++/.vscode
++/__pycache__
+diff --git a/README.md b/README.md
+new file mode 100644
+index 0000000..a3b2ae7
+--- /dev/null
++++ b/README.md
+@@ -0,0 +1 @@
++# tps-sisop
+\ No newline at end of file
+diff --git a/TP1.md b/TP1.md
+index 4b64f1f..6ac4ff5 100644
+--- a/TP1.md
++++ b/TP1.md
+@@ -4,18 +4,91 @@ TP1: Memoria virtual en JOS
+ page2pa
+ -------
+ 
+-...
++	A partir de un puntero a un PageInfo (pp), se le resta el puntero del comienzo del arreglo pages (pp - pages) para hallar su distancia. Luego, realizando un shift de 12 bits hacia la izquierda (multiplicando por 4096) se setean los 12 bits mas bajos en cero y se obtiene la direccion de memoria fisica del comienzo de la pagina alineada correspondientemente.
+ 
+ 
+ boot_alloc_pos
+ --------------
+ 
+-...
++Calculo manual: 
++
++Al hacer "nm kernel" se obtiene que end = 0xf0117950, la cual es la direccion a partir de la cual boot_alloc() alocara memoria.
++
++Existen unicamente dos llamados a boot_alloc(). En el primero, se llama con PGSIZE = 2^12 = 4096. En el segundo, se llama con npages*sizeof(struct PageInfo) = 2^8 * 2^10 = 2^18 = 262144. En total: 2^12 + 2^18 = 266240 = 0x41000.
++
++Si se le suma este valor a end: 0xf0117950 + 0x41000 = 0xf0158950
++Pero como boot_alloc() devolvera una direccion alineada a 12 bits, sera 0xf0159000
++
++$ make gdb
++gdb -q -s obj/kern/kernel -ex 'target remote 127.0.0.1:26000' -n -x .gdbinit
++Reading symbols from obj/kern/kernel...done.
++Remote debugging using 127.0.0.1:26000
++warning: No executable has been specified and target does not support
++determining executable automatically.  Try using the "file" command.
++0x0000fff0 in ?? ()
++(gdb) b boot_alloc
++Breakpoint 1 at 0xf0100b27: file kern/pmap.c, line 89.
++(gdb) c
++Continuing.
++The target architecture is assumed to be i386
++=> 0xf0100b27 <boot_alloc>:	push   %ebp
++
++Breakpoint 1, boot_alloc (n=4096) at kern/pmap.c:89
++89	{
++(gdb) b 123
++Breakpoint 2 at 0xf0100b8b: file kern/pmap.c, line 123.
++(gdb) p (void*) end
++$1 = (void *) 0x10012
++(gdb) x (void*) end
++   0x10012:	add    (%eax),%eax
++(gdb) p nextfree
++$2 = 0x0
++(gdb) x nextfree
++   0x0:	push   %ebx
++(gdb) c
++Continuing.
++=> 0xf0100b8b <boot_alloc+100>:	jmp    0xf0100b3f <boot_alloc+24>
++
++Breakpoint 2, boot_alloc (n=281) at kern/pmap.c:123
++123		return result;
++(gdb) p (void*) end
++$3 = (void *) 0x10012
++(gdb) x (void*) end
++   0x10012:	add    (%eax),%eax
++(gdb) p nextfree
++$4 = 0xf0119000 ""
++(gdb) x nextfree
++   0xf0119000:	add    %al,(%eax)
++(gdb) 
++
+ 
+ 
+ page_alloc
+ ----------
+ 
+-...
++	page2pa() devuelve, dado un puntero a una pagina, la direccion fisica en la cual comienza.
++	En cambio, page2kva() primero obtiene el mismo resultado llamando a page2pa() pero luego le suma KERNBASE. Con esto, se obtiene la direccion de memoria virtual del kernel que corresponde con la pagina pasada por parametro.
++
++map_region_large
++----------
++
++	De los tres llamados a boot_map_region, unicamente el ultimo hace uso de large pages ya que en los otros casos la direccion fisica no se encuentra alineada a 22 bits.
++
++En ese llamado, el tamanio que se especifica es: size = 268435456 = 2^28.
++
++Sin utilizar large pages:
++La cantidad de page table entries necesarias para direccionar esa size es: 2^28/2^12 = 2^16 = 65536
++En total, ocupa: 65536pte = 2^16 * 2^2 = 2^18 = 262144 = 256k bytes
++La cantidad de page tables necesarias para direccionar eso es: 2^16/2^10 = 2^6 = 64
++Al necesitar 64 page tables, se necesitan 64 page directory entries, en total: 64pde = 2^6 * 2^2 = 2^8 = 256 bytes
++Sumando todo, la cantidad de memoria total necesaria es: 2^18 + 2^8 = 262400 bytes
++
++Utilizando large pages:
++La cantidad de page directory entries necesarias para direccionar esa size es: 2^28/2^22 = 2^6 = 64
++En total, ocupa: 64pde = 2^6 * 2^2 = 2^8 = 256 bytes
++
++Haciendo la diferencia, se obtiene que 2^18 + 2^8 - 2^8 = 2^18 = 2^8 * 2^10 = 256k bytes es la cantidad de memoria que se ahorra utilizando large pages. Este valor corresponde con el tamanio de las page tables que no se utilizan en este modo.
+ 
++Ademas, al quitar un nivel de indireccion, tambien se liberan cantidad de entradas en la TLB lo cual mejora la performance de las busquedas a memoria.
+ 
++Es una cantidad fija que no depende de la memoria fisica total de la computadora ya que esta implementacion esta relacionada con la manera de traducir direcciones virtuales a fisicas, no con la cantidad que se quiere alocar.
+diff --git a/kern/entry.S b/kern/entry.S
+index 6c58826..212284f 100644
+--- a/kern/entry.S
++++ b/kern/entry.S
+@@ -57,6 +57,12 @@ entry:
+ 	# is defined in entrypgdir.c.
+ 	movl	$(RELOC(entry_pgdir)), %eax
+ 	movl	%eax, %cr3
++	
++	# Turn on large paging.
++	movl	%cr4, %eax
++	orl	$(CR4_PSE), %eax
++	movl	%eax, %cr4
++	
+ 	# Turn on paging.
+ 	movl	%cr0, %eax
+ 	orl	$(CR0_PE|CR0_PG|CR0_WP), %eax
+diff --git a/kern/entrypgdir.c b/kern/entrypgdir.c
+index 4f324d1..c22ebb8 100644
+--- a/kern/entrypgdir.c
++++ b/kern/entrypgdir.c
+@@ -21,14 +21,15 @@ __attribute__((__aligned__(PGSIZE)))
+ pde_t entry_pgdir[NPDENTRIES] = {
+ 	// Map VA's [0, 4MB) to PA's [0, 4MB)
+ 	[0]
+-		= ((uintptr_t)entry_pgtable - KERNBASE) + PTE_P,
++		= ((uintptr_t)0x0) + PTE_PS + PTE_P,
+ 	// Map VA's [KERNBASE, KERNBASE+4MB) to PA's [0, 4MB)
+ 	[KERNBASE>>PDXSHIFT]
+-		= ((uintptr_t)entry_pgtable - KERNBASE) + PTE_P + PTE_W
++		= ((uintptr_t)0x0) + PTE_PS + PTE_W + PTE_P
+ };
+ 
+ // Entry 0 of the page table maps to physical page 0, entry 1 to
+ // physical page 1, etc.
++#if 0  // entry_pgtable no longer needed.
+ __attribute__((__aligned__(PGSIZE)))
+ pte_t entry_pgtable[NPTENTRIES] = {
+ 	0x000000 | PTE_P | PTE_W,
+@@ -1056,4 +1057,5 @@ pte_t entry_pgtable[NPTENTRIES] = {
+ 	0x3fe000 | PTE_P | PTE_W,
+ 	0x3ff000 | PTE_P | PTE_W,
+ };
++#endif
+ 
+diff --git a/kern/pmap.c b/kern/pmap.c
+index 88608e7..3b1e833 100644
+--- a/kern/pmap.c
++++ b/kern/pmap.c
+@@ -105,8 +105,18 @@ boot_alloc(uint32_t n)
+ 	// to a multiple of PGSIZE.
+ 	//
+ 	// LAB 2: Your code here.
++	result = nextfree;
++	if (n != 0){
++		// n to bytes to complete pages
++		n = ROUNDUP(n, PGSIZE);
+ 
+-	return NULL;
++		if (PGNUM(PADDR(nextfree + n)) > npages){
++			panic("boot_alloc: not enough memory");
++		}
++		nextfree = nextfree + n;
++	}
++		
++	return result;
+ }
+ 
+ // Set up a two-level page table:
+@@ -128,7 +138,7 @@ mem_init(void)
+ 	i386_detect_memory();
+ 
+ 	// Remove this line when you're ready to test this function.
+-	panic("mem_init: This function is not finished\n");
++	//panic("mem_init: This function is not finished\n");
+ 
+ 	//////////////////////////////////////////////////////////////////////
+ 	// create initial page directory.
+@@ -153,7 +163,8 @@ mem_init(void)
+ 	// memset
+ 	// to initialize all fields of each struct PageInfo to 0.
+ 	// Your code goes here:
+-
++	pages = (struct PageInfo *) boot_alloc(npages*sizeof(struct PageInfo));
++	memset(pages, 0, npages*sizeof(struct PageInfo));
+ 
+ 	//////////////////////////////////////////////////////////////////////
+ 	// Now that we've allocated the initial kernel data structures, we set
+@@ -176,7 +187,8 @@ mem_init(void)
+ 	//    - the new image at UPAGES -- kernel R, user R
+ 	//      (ie. perm = PTE_U | PTE_P)
+ 	//    - pages itself -- kernel RW, user NONE
+-	// Your code goes here:
++	// Your code goes here:	
++	boot_map_region(kern_pgdir, UPAGES, PTSIZE, PADDR(pages), PTE_U | PTE_P);
+ 
+ 	//////////////////////////////////////////////////////////////////////
+ 	// Use the physical memory that 'bootstack' refers to as the kernel
+@@ -189,6 +201,7 @@ mem_init(void)
+ 	//       overwrite memory.  Known as a "guard page".
+ 	//     Permissions: kernel RW, user NONE
+ 	// Your code goes here:
++	boot_map_region(kern_pgdir, KSTACKTOP - KSTKSIZE, KSTKSIZE, PADDR(bootstack), PTE_W | PTE_P);
+ 
+ 	//////////////////////////////////////////////////////////////////////
+ 	// Map all of physical memory at KERNBASE.
+@@ -198,6 +211,8 @@ mem_init(void)
+ 	// we just set up the mapping anyway.
+ 	// Permissions: kernel RW, user NONE
+ 	// Your code goes here:
++	boot_map_region(kern_pgdir, KERNBASE, ~0 - KERNBASE + 1, 0, PTE_W | PTE_P);
++
+ 
+ 	// Check that the initial page directory has been set up correctly.
+ 	check_kern_pgdir();
+@@ -258,7 +273,12 @@ page_init(void)
+ 	// free pages!
+ 	size_t i;
+ 	for (i = 0; i < npages; i++) {
+-		pages[i].pp_ref = 0;
++		if ((i == 0) ||
++		 (i >= PGNUM(IOPHYSMEM) && (i < PGNUM(EXTPHYSMEM))) ||
++		 (i >= PGNUM(EXTPHYSMEM) && (i < PGNUM(PADDR(boot_alloc(0))))))
++		 {
++			continue;
++		}
+ 		pages[i].pp_link = page_free_list;
+ 		page_free_list = &pages[i];
+ 	}
+@@ -280,7 +300,17 @@ struct PageInfo *
+ page_alloc(int alloc_flags)
+ {
+ 	// Fill this function in
+-	return 0;
++	struct PageInfo * nextfree = page_free_list;
++	if (nextfree){
++		page_free_list = page_free_list->pp_link;
++		nextfree->pp_link = NULL;
++
++		if (alloc_flags & ALLOC_ZERO){
++			memset(page2kva(nextfree), 0, PGSIZE);
++		}
++	}
++
++	return nextfree;
+ }
+ 
+ //
+@@ -293,6 +323,10 @@ page_free(struct PageInfo *pp)
+ 	// Fill this function in
+ 	// Hint: You may want to panic if pp->pp_ref is nonzero or
+ 	// pp->pp_link is not NULL.
++	if ((pp->pp_ref != 0)||(pp->pp_link != NULL))
++		panic("page_free: failed!");
++	pp->pp_link = page_free_list; 
++	page_free_list = pp;
+ }
+ 
+ //
+@@ -331,8 +365,23 @@ page_decref(struct PageInfo *pp)
+ pte_t *
+ pgdir_walk(pde_t *pgdir, const void *va, int create)
+ {
+-	// Fill this function in
+-	return NULL;
++	pte_t *p;
++	pgdir = &pgdir[PDX(va)];
++	if ((*pgdir & PTE_P)){
++		p = (pte_t *) KADDR(PTE_ADDR(*pgdir));
++		return &(p[PTX(va)]);
++	}
++	if (!create){
++		return NULL;
++	}
++	struct PageInfo * nextfree = page_alloc(ALLOC_ZERO);
++	if (!nextfree){
++		return NULL;
++	}
++	nextfree->pp_ref++;
++	*pgdir = page2pa(nextfree) | PTE_P;
++	p = (pte_t *) KADDR(PTE_ADDR(*pgdir));
++	return &(p[PTX(va)]);
+ }
+ 
+ //
+@@ -348,8 +397,39 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
+ // Hint: the TA solution uses pgdir_walk
+ static void
+ boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm)
+-{
+-	// Fill this function in
++{	
++#ifndef TP1_PSE
++	for (int i = 0; i < size / PGSIZE; i++){
++		pte_t* pte = pgdir_walk(pgdir, (void*)va + i * PGSIZE, true);
++		//if page table couldn't be allocated
++		if (!pte){
++			continue;
++		}
++		pgdir[PDX(va + i * PGSIZE)] = pgdir[PDX(va + i * PGSIZE)] | (perm|PTE_P);
++		*pte = (pa + i * PGSIZE) | (perm|PTE_P);
++	}
++#else
++	if (pa % PTSIZE == 0){
++		int i = 0;
++		while(size >= PTSIZE){
++			pgdir[PDX(va + i * PTSIZE)] = (pa + i * PTSIZE) | (perm|PTE_PS|PTE_P);
++			size -= PTSIZE;
++			i++;
++		}
++		va = va + i * PTSIZE;
++	}
++	int n = ROUNDUP(size, PGSIZE);
++	for (int i = 0; i < n / PGSIZE; i++){
++		pte_t* pte = pgdir_walk(pgdir, (void*)va + i * PGSIZE, true);
++		//if page table couldn't be allocated
++		if (!pte){
++			continue;
++		}
++		pgdir[PDX(va + i * PGSIZE)] = pgdir[PDX(va + i * PGSIZE)] | (perm|PTE_P);
++		*pte = (pa + i * PGSIZE) | (perm|PTE_P);
++	}
++	
++#endif
+ }
+ 
+ //
+@@ -380,7 +460,24 @@ boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm
+ int
+ page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
+ {
+-	// Fill this function in
++	pte_t* pte = pgdir_walk(pgdir, va, true);
++	//if page table couldn't be allocated
++	if (!pte){
++		return -E_NO_MEM;
++	}
++	// if the same pp is re-inserted at the same virtual 
++	// address in the same pgdir it wont be freed 
++	// because we are advising that it would have other use
++	pp->pp_ref++;
++	// If there is already a page mapped at 'va'
++	if ((*pte & PTE_P)){
++		page_remove(pgdir, va);
++	}
++	// Set the pde's permitions too
++	// so the pde have all the permitions that their
++	// pte's have.
++	pgdir[PDX(va)] = pgdir[PDX(va)] | (perm|PTE_P);
++	*pte = PTE_ADDR(page2pa(pp)) | (perm|PTE_P);
+ 	return 0;
+ }
+ 
+@@ -398,8 +495,15 @@ page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
+ struct PageInfo *
+ page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
+ {
+-	// Fill this function in
+-	return NULL;
++	pte_t* pte = pgdir_walk(pgdir, va, false);
++	if (!pte || !(*pte & PTE_P)){
++		return NULL;
++	}
++	if (pte_store){
++		*pte_store = pte;
++	}
++	physaddr_t pa = PTE_ADDR(*pte) + PGOFF(va);
++	return pa2page(pa);
+ }
+ 
+ //
+@@ -419,8 +523,15 @@ page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
+ //
+ void
+ page_remove(pde_t *pgdir, void *va)
+-{
+-	// Fill this function in
++{	
++	// trash declaration that will be overwritten by page_lookup
++	pte_t* pte = (pte_t*) 0x1;
++	struct PageInfo* pp = page_lookup(pgdir, va, &pte);
++	if (pp){
++		*pte = 0;
++		tlb_invalidate(pgdir, va);
++		page_decref(pp);
++	}
+ }
+ 
+ //

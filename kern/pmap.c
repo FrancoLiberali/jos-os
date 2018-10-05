@@ -105,16 +105,12 @@ boot_alloc(uint32_t n)
 	// to a multiple of PGSIZE.
 	//
 	// LAB 2: Your code here.
-	/*if (no tengo mas memoria)
-		panic("boot_alloc: no more free memory");*/
 	result = nextfree;
 	if (n != 0){
-		// n = bytes to complete pages
+		// n to bytes to complete pages
 		n = ROUNDUP(n, PGSIZE);
 
-		//opcion mas linda
-		if (PGNUM(PADDR(nextfree + n)) > npages){// o >=
-		//if ((size_t)nextfree + n >= npages * PGSIZE + KERNBASE){
+		if (PGNUM(PADDR(nextfree + n)) > npages){
 			panic("boot_alloc: not enough memory");
 		}
 		nextfree = nextfree + n;
@@ -281,10 +277,8 @@ page_init(void)
 		 (i >= PGNUM(IOPHYSMEM) && (i < PGNUM(EXTPHYSMEM))) ||
 		 (i >= PGNUM(EXTPHYSMEM) && (i < PGNUM(PADDR(boot_alloc(0))))))
 		 {
-			//pages[i].pp_ref = 1;
 			continue;
 		}
-		//pages[i].pp_ref = 0;
 		pages[i].pp_link = page_free_list;
 		page_free_list = &pages[i];
 	}
@@ -424,7 +418,7 @@ boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm
 		}
 		va = va + i * PTSIZE;
 	}
-	int n = ROUNDUP(size, PGSIZE); // no es necesario porque size es multiplo de PGSIZE
+	int n = ROUNDUP(size, PGSIZE);
 	for (int i = 0; i < n / PGSIZE; i++){
 		pte_t* pte = pgdir_walk(pgdir, (void*)va + i * PGSIZE, true);
 		//if page table couldn't be allocated
@@ -479,10 +473,9 @@ page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 	if ((*pte & PTE_P)){
 		page_remove(pgdir, va);
 	}
-	// en ningun momento aclara que esto se
-	// deba hacer pero la prueba
-	// "should be able to change permissions too."
-	// lo chequea en su ultima linea
+	// Set the pde's permitions too
+	// so the pde have all the permitions that their
+	// pte's have.
 	pgdir[PDX(va)] = pgdir[PDX(va)] | (perm|PTE_P);
 	*pte = PTE_ADDR(page2pa(pp)) | (perm|PTE_P);
 	return 0;
@@ -510,7 +503,6 @@ page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
 		*pte_store = pte;
 	}
 	physaddr_t pa = PTE_ADDR(*pte) + PGOFF(va);
-	//physaddr_t pa = (physaddr_t) PGADDR(PDX(*pte), PTX(*pte), PGOFF(va));
 	return pa2page(pa);
 }
 
