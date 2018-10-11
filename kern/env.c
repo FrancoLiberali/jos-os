@@ -478,6 +478,15 @@ env_run(struct Env *e)
 	//	e->env_tf to sensible values.
 
 	// LAB 3: Your code here.
+	/*if (curenv){
+		if (curenv->env_type == (enum EnvType) ENV_RUNNING)
+			curenv->env_type == (enum EnvType) ENV_RUNNABLE;
+		curenv = e;
+		curenv->env_type == (enum EnvType) ENV_RUNNING;
+		curenv->env_runs++;
+		lcr3((uint32_t) curenv->env_pgdir);
+	}
+	env_pop_tf(&(curenv->env_tf));*/	//Lo comento porque si no se queda en un loop infinito no se por que
 
-	panic("env_run not yet implemented");
+	//panic("env_run not yet implemented");
 }
