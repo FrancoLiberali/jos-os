@@ -58,6 +58,25 @@ trapname(int trapno)
 }
 
 void divide_error();
+void debug();
+void non_maskable_interrupt();
+void breakpoint();
+void overflow();
+void bound_range_exceeded();
+void invalid_opcode();
+void device_not_available();
+void double_fault();
+/*void coprocessor_segent_overrun();*/
+void invalid_tss();
+void segment_not_present();
+void stack_fault();
+void general_protection();
+void page_fault();
+/*void unknown_trap();*/
+void x86_fpu_floating_point_error();
+void alignment_check();
+void machine_check();
+void simd_floating_point_exception();
 
 void
 trap_init(void)
@@ -65,8 +84,26 @@ trap_init(void)
 	extern struct Segdesc gdt[];
 
 	// LAB 3: Your code here.
-	// divide zero, a fault
-	SETGATE(idt[T_DIVIDE], 1, GD_KT, (&divide_error), 3);
+	SETGATE(idt[T_DIVIDE], 1, GD_KT, (&divide_error), 3)
+	SETGATE(idt[T_DEBUG], 1, GD_KT, (&debug), 3)
+	SETGATE(idt[T_NMI], 0, GD_KT, (&non_maskable_interrupt), 3)
+	SETGATE(idt[T_BRKPT], 1, GD_KT, (&breakpoint), 3)
+	SETGATE(idt[T_OFLOW], 1, GD_KT, (&overflow), 3)
+	SETGATE(idt[T_BOUND], 1, GD_KT, (&bound_range_exceeded), 3)
+	SETGATE(idt[T_ILLOP], 1, GD_KT, (&invalid_opcode), 3)
+	SETGATE(idt[T_DEVICE], 1, GD_KT, (&device_not_available), 3)
+	SETGATE(idt[T_DBLFLT], 1, GD_KT, (&double_fault), 3)
+	/*SETGATE(idt[T_COPROC], 1, GD_KT, (&coprocessor_segent_overrun), 3)*/
+	SETGATE(idt[T_TSS], 1, GD_KT, (&invalid_tss), 3)
+	SETGATE(idt[T_SEGNP], 1, GD_KT, (&segment_not_present), 3)
+	SETGATE(idt[T_STACK], 1, GD_KT, (&stack_fault), 3)
+	SETGATE(idt[T_GPFLT], 1, GD_KT, (&general_protection), 3)
+	SETGATE(idt[T_PGFLT], 1, GD_KT, (&page_fault), 0)
+	/*SETGATE(idt[T_TRES], 1, GD_KT, (&unknown_trap), 3)*/
+	SETGATE(idt[T_FPERR], 1, GD_KT, (&x86_fpu_floating_point_error), 3)
+	SETGATE(idt[T_ALIGN], 1, GD_KT, (&alignment_check), 3)
+	SETGATE(idt[T_MCHK], 1, GD_KT, (&machine_check), 3)
+	SETGATE(idt[T_SIMDERR], 1, GD_KT, (&simd_floating_point_exception), 3)
 
 	// Per-CPU setup
 	trap_init_percpu();
