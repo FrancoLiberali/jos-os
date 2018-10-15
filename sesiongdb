@@ -101,9 +101,8 @@ EIP=f0102d03 EFL=00000096 [--S-AP-] CPL=0 II=0 A20=1 SMM=0 HLT=0
 ES =0023 00000000 ffffffff 00cff300 DPL=3 DS   [-WA]
 CS =0008 00000000 ffffffff 00cf9a00 DPL=0 CS32 [-R-]
 
-(gdb) si
-=> 0x800020:	Error while running hook_stop:
-No se puede acceder a la memoria en la dirección 0x800020
+(gdb) 
+=> 0x800020:	cmp    $0xeebfe000,%esp
 0x00800020 in ?? ()
 (gdb) p $pc
 $1 = (void (*)()) 0x800020
@@ -113,25 +112,15 @@ Leyendo símbolos desde obj/user/hello...hecho.
 Error in re-setting breakpoint 1: Función «env_pop_tf» no definida.
 (gdb) p $pc
 $2 = (void (*)()) 0x800020 <_start>
-
-(qemu) info registers
-EAX=00000000 EBX=00000000 ECX=00000000 EDX=00000000
-ESI=00000000 EDI=00000000 EBP=00000000 ESP=eebfe000
-EIP=00800020 EFL=00000002 [-------] CPL=3 II=0 A20=1 SMM=0 HLT=0
-ES =0023 00000000 ffffffff 00cff300 DPL=3 DS   [-WA]
-CS =001b 00000000 ffffffff 00cffa00 DPL=3 CS32 [-R-]
-
 (gdb) tbreak syscall
 Punto de interrupción temporal 2 at 0x8009f3: file lib/syscall.c, line 8.
 (gdb) c
 Continuando.
+=> 0x8009f3 <syscall>:	push   %ebp
 
-Program received signal SIGTRAP, Trace/breakpoint trap.
-=> 0x800020 <_start>:	Error while running hook_stop:
-No se puede acceder a la memoria en la dirección 0x800020
-_start () at lib/entry.S:23
-23		cmpl $USTACKTOP, %esp
-
-Triple fault.  Halting for inspection via QEMU monitor.
+Temporary breakpoint 2, syscall (num=num@entry=0, check=check@entry=0, 
+    a1=a1@entry=4005551752, a2=13, a3=0, a4=0, a5=0) at lib/syscall.c:8
+8	{
+(gdb) quit
 
 
