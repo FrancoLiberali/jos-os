@@ -57,6 +57,7 @@ trapname(int trapno)
 	return "(unknown trap)";
 }
 
+void divide_zero_handler();
 
 void
 trap_init(void)
@@ -64,6 +65,8 @@ trap_init(void)
 	extern struct Segdesc gdt[];
 
 	// LAB 3: Your code here.
+	// divide zero, a fault
+	SETGATE(idt[T_DIVIDE], 0, GD_KT, (&divide_zero_handler), 0);	
 
 	// Per-CPU setup
 	trap_init_percpu();
