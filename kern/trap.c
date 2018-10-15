@@ -66,7 +66,7 @@ trap_init(void)
 
 	// LAB 3: Your code here.
 	// divide zero, a fault
-	SETGATE(idt[T_DIVIDE], 0, 1, (&divide_error), 3);
+	SETGATE(idt[T_DIVIDE], 1, GD_KT, (&divide_error), 3);
 
 	// Per-CPU setup
 	trap_init_percpu();
