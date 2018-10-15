@@ -78,6 +78,8 @@ void alignment_check();
 void machine_check();
 void simd_floating_point_exception();
 
+void syscall_trap();
+
 void
 trap_init(void)
 {
@@ -101,9 +103,11 @@ trap_init(void)
 	SETGATE(idt[T_PGFLT], 1, GD_KT, (&page_fault), 0)
 	/*SETGATE(idt[T_TRES], 1, GD_KT, (&unknown_trap), 3)*/
 	SETGATE(idt[T_FPERR], 1, GD_KT, (&x86_fpu_floating_point_error), 3)
-	SETGATE(idt[T_ALIGN], 1, GD_KT, (&alignment_check), 3)
-	SETGATE(idt[T_MCHK], 1, GD_KT, (&machine_check), 3)
-	SETGATE(idt[T_SIMDERR], 1, GD_KT, (&simd_floating_point_exception), 3)
+	SETGATE(idt[T_ALIGN], 0, GD_KT, (&alignment_check), 3)
+	SETGATE(idt[T_MCHK], 0, GD_KT, (&machine_check), 3)
+	SETGATE(idt[T_SIMDERR], 0, GD_KT, (&simd_floating_point_exception), 3)
+
+	SETGATE(idt[T_SYSCALL], 1, GD_KT, (&syscall_trap), 3)
 
 	// Per-CPU setup
 	trap_init_percpu();
@@ -182,7 +186,28 @@ trap_dispatch(struct Trapframe *tf)
 {
 	// Handle processor exceptions.
 	// LAB 3: Your code here.
-	if (tf->tf_trapno == T_BRKPT) monitor(tf);
+	switch(tf->tf_trapno){
+		case T_BRKPT: monitor(tf); return;
+		case T_PGFLT: page_fault_handler(tf); return;
+		case T_SYSCALL: {
+			tf->tf_regs.reg_eax = syscall(tf->tf_regs.reg_eax, 
+					tf->tf_regs.reg_edx, tf->tf_regs.reg_ecx, 
+					tf->tf_regs.reg_ebx, tf->tf_regs.reg_edi, 
+					tf->tf_regs.reg_esi);
+			return;
+			}
+		default: {
+			// Unexpected trap: The user process or the kernel has a bug.
+			print_trapframe(tf);
+			if (tf->tf_cs == GD_KT)
+				panic("unhandled trap in kernel");
+			else {
+				env_destroy(curenv);
+				return;
+			}
+		}
+	}
+	/*if (tf->tf_trapno == T_BRKPT) monitor(tf);
 	else if (tf->tf_trapno == T_PGFLT) page_fault_handler(tf);
 
 	else{
@@ -194,7 +219,7 @@ trap_dispatch(struct Trapframe *tf)
 			env_destroy(curenv);
 			return;
 		}
-	}
+	}*/
 }
 
 void

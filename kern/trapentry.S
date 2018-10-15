@@ -66,6 +66,8 @@ TRAPHANDLER_NOEC(x86_fpu_floating_point_error, T_FPERR);
 TRAPHANDLER(alignment_check, T_ALIGN);
 TRAPHANDLER_NOEC(machine_check, T_MCHK);
 TRAPHANDLER_NOEC(simd_floating_point_exception, T_SIMDERR);
+
+TRAPHANDLER_NOEC(syscall_trap, T_SYSCALL);
 /*
 from user-mode with not error code
                      +--------------------+ KSTACKTOP             
