@@ -586,7 +586,16 @@ int
 user_mem_check(struct Env *env, const void *va, size_t len, int perm)
 {
 	// LAB 3: Your code here.
-
+	if ((int) va % PGSIZE != 0) va = ROUNDDOWN(va,PGSIZE);
+	if (len % PGSIZE != 0) len = ROUNDUP(len,PGSIZE);
+	while (va != va+len){
+		if (va > (void*) ULIM){
+			user_mem_check_addr = (uintptr_t) va;
+			return -E_FAULT;
+		}
+		user_mem_assert(env,va,len,perm);
+		va += PGSIZE;
+	}
 	return 0;
 }
 
