@@ -121,11 +121,6 @@ env_init(void)
 		e->env_link = (struct Env*) (e + 1);
 		e = e->env_link;
 	}
-	/*while (e){
-		e->env_status = ENV_FREE;
-		e->env_id = 0;
-		e = e->env_link;
-	}*/
 
 	// Per-CPU part of the initialization
 	env_init_percpu();
@@ -189,7 +184,6 @@ env_setup_vm(struct Env *e)
 	//    - The functions in kern/pmap.h are handy.
 
 	// LAB 3: Your code here.
-	//memcpy((void*) page2kva(p), kern_pgdir, PTSIZE);
 	memcpy((void*) page2kva(p), kern_pgdir, PGSIZE);
 	p->pp_ref++;
 	e->env_pgdir = (pde_t*) page2kva(p);
@@ -281,12 +275,10 @@ region_alloc(struct Env *e, void *va, size_t len)
 	//   'va' and 'len' values that are not page-aligned.
 	//   You should round va down, and round (va + len) up.
 	//   (Watch out for corner-cases!)
-	//if ((int) va % PTSIZE != 0) va = ROUNDDOWN(va,PTSIZE);
-	int dst = (int)va + len; //POSIBLE OVERFLOW?
+	int dst = (int)va + len;
 	if ((int) va % PGSIZE != 0){
 		va = ROUNDDOWN(va, PGSIZE);
 	}
-	//if (dst % PTSIZE != 0) dst = ROUNDUP(dst,PTSIZE);
 	if (dst % PGSIZE != 0){
 		dst = ROUNDUP(dst, PGSIZE);
 	}
@@ -294,7 +286,6 @@ region_alloc(struct Env *e, void *va, size_t len)
 		struct PageInfo* p = page_alloc(0);
 		if (!p) panic("region_alloc: failed to allocate a page!");
 		page_insert(e->env_pgdir, p, va, (PTE_W|PTE_P|PTE_U));
-		//va += PTSIZE;
 		va += PGSIZE;
 	}
 }
@@ -368,10 +359,7 @@ load_icode(struct Env *e, uint8_t *binary)
 			continue;
 		}
 		region_alloc(e, (void*) ph->p_va, ph->p_memsz);
-		//mapear en p_va un tamaño memsz
-		//para ello debo crear paginas para el tamaño memsz y copiar lo que tiene filesz
 		memcpy((void*) ph->p_va, binary + ph->p_offset, ph->p_filesz);
-		//porque lo copio y no lo mapeo directo?
 		memset((void*) (ph->p_va + ph->p_filesz), 0,  ph->p_memsz - ph->p_filesz);
 	}
 	e->env_tf.tf_eip = elf->e_entry;
