@@ -1,3 +1,0 @@
-\select@language {spanish}
-\contentsline {section}{\numberline {1}Inicializaciones}{2}
-\contentsline {subsection}{\numberline {1.1}env\_alloc}{2}

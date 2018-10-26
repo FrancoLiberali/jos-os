@@ -145,22 +145,16 @@ End of assembler dump.
 0xf01d8040:	0x00000023
 ```
 Si, es el mismo contenido.
-7. Explicar con el mayor detalle posible cada uno de los valores. Para los valores no nulos, se debe indicar dónde se configuró inicialmente el valor, y qué representa.
 
-	Los primeros ocho 0x00000000 representan los primeros ocho registros del struct Trapframe, los registros de proposito general: %edi, %esi, %ebp, %oesp, %ebx, %edx, %ecx, %eax en este orden. Todos se encuentran en 0 porque la ejecución de este env aún no comenzó por lo que en ningun momento guardó nada en registros de proposito general.
-    
-    En los siguientes dos y en el ultimo encontramos un 0x00000023. Estos valores representan a los registros %es, %ds, %ss respectivamente. Estos son registros de segmento y fueron cargados con este valor en env_alloc con "GD_UD | 3", para que estos segmentos tengan la referencia a el user data segment y ademas se le agrega un tres en los dos bits mas bajos, el cual quiere significa privilegios de user mode.
-    
-    Los dos siguientes se encuentran en cero, siendo estos el %trapno y el %err. Se encuentran en cero porque no ocurrió ninguna interupción si el env nisiquiera se esta ejecutando.
-    
-    Luego encontramos un 0x00800020, el cual representa al %eip. Este numero es el entry point del env, la primera instrucción que va a ejecutar cuando inicie. El mismo fue cargado durante load_icode, y el valor se encontraba contenido dentro del ELF.
-    
-    A continuación encontramos un 0x0000001b, el cual reprensenta al %cs. El code segment fue cargado durante env_alloc con "GD_UT | 3", para que tenga referencia al segmento user text y con privilegios de usuario.
-    
-    El siguiente es un 0x00000000 de %eflags, nuevamente como aún no hubo ejecucón no tiene sentido que haya un vlaor allí.
-    
-    Por ultimo tenemos un 0xeebfe000, el cual representa al %esp. El mismo fue cargado durante env_alloc apuntando al user stack top, ya que como se va a empezar a usar el stack debe iniciar desde el tope del mismo.
-    
+7. Explicar con el mayor detalle posible cada uno de los valores. Para los valores no nulos, se debe indicar dónde se configuró inicialmente el valor, y qué representa.
+Los primeros ocho 0x00000000 representan los primeros ocho registros del struct Trapframe, los registros de proposito general: %edi, %esi, %ebp, %oesp, %ebx, %edx, %ecx, %eax en este orden. Todos se encuentran en 0 porque la ejecución de este env aún no comenzó por lo que en ningun momento guardó nada en registros de proposito general.
+   En los siguientes dos y en el ultimo encontramos un 0x00000023. Estos valores representan a los registros %es, %ds, %ss respectivamente. Estos son registros de segmento y fueron cargados con este valor en env_alloc con "GD_UD | 3", para que estos segmentos tengan la referencia a el user data segment y ademas se le agrega un tres en los dos bits mas bajos, el cual quiere significa privilegios de user mode.
+Los dos siguientes se encuentran en cero, siendo estos el %trapno y el %err. Se encuentran en cero porque no ocurrió ninguna interupción si el env nisiquiera se esta ejecutando.
+Luego encontramos un 0x00800020, el cual representa al %eip. Este numero es el entry point del env, la primera instrucción que va a ejecutar cuando inicie. El mismo fue cargado durante load_icode, y el valor se encontraba contenido dentro del ELF.
+A continuación encontramos un 0x0000001b, el cual reprensenta al %cs. El code segment fue cargado durante env_alloc con "GD_UT | 3", para que tenga referencia al segmento user text y con privilegios de usuario.
+El siguiente es un 0x00000000 de %eflags, nuevamente como aún no hubo ejecucón no tiene sentido que haya un vlaor allí.
+Por ultimo tenemos un 0xeebfe000, el cual representa al %esp. El mismo fue cargado durante env_alloc apuntando al user stack top, ya que como se va a empezar a usar el stack debe iniciar desde el tope del mismo.
+
 8. Continuar hasta la instrucción iret, sin llegar a ejecutarla. Mostrar en este punto, de nuevo, las cinco primeras líneas de info registers en el monitor de QEMU. Explicar los cambios producidos.
 ```
 (gdb) si 4
@@ -181,11 +175,13 @@ Los cambios producidos son que en los registros de proposito general ya se pusie
 => 0x800020:	cmp    $0xeebfe000,%esp
 0x00800020 in ?? ()
 ```
+
 	1. Imprimir el valor del contador de programa con p $pc o p $eip
 ```
 (gdb) p $pc
 $1 = (void (*)()) 0x800020
 ```
+
 	2. Cargar los símbolos de hello con symbol-file obj/user/hello
 ```
 (gdb) symbol-file obj/user/hello
@@ -193,11 +189,13 @@ $1 = (void (*)()) 0x800020
 Leyendo símbolos desde obj/user/hello...hecho.
 Error in re-setting breakpoint 1: Función «env_pop_tf» no definida.
 ```
+
 	3. Volver a imprimir el valor del contador de programa
 ```
 (gdb) p $pc
 $2 = (void (*)()) 0x800020 <_start>
 ```
+
 	4. Mostrar una última vez la salida de info registers en QEMU, y explicar los cambios producidos.
 ```
 (qemu) info registers
@@ -208,6 +206,7 @@ ES =0023 00000000 ffffffff 00cff300 DPL=3 DS   [-WA]
 CS =001b 00000000 ffffffff 00cffa00 DPL=3 CS32 [-R-]
 ```
 Ahora, todos los datos que se encontraban en el Trapframe del env se encuentran en el CPU, el cual se esta ejecutando ya que la siguiente instrucción a ejecutar apuntada por el %eip es el entry point del mismo. El cambio de contexto se ha realizado con exito.
+
 10. Poner un breakpoint temporal (tbreak, se aplica una sola vez) en la función syscall() y explicar qué ocurre justo tras ejecutar la instrucción int $0x30. Usar, de ser necesario, el monitor de QEMU.
 ```
 (gdb) tbreak syscall
