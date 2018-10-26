@@ -38,7 +38,10 @@ fallarian porque el stack no queda configurado de la manera que deberia segun la
 (istrap = 0), se resetea el valor de IF (interrupt-enable flag) lo cual previene que otras interrupciones interfieran con el
 manejo de la primera. Luego, cuando se ejecuta iret, se restaura el valor de IF al valor que tenia EFLAGS en el stack. Por otra
 parte, si se trata de una excepcion (istrap = 1), no se modifica el valor de IF.
-
+	Al correr make run-softint-nox se observa que se genero una excepcion del tipo General Protection en vez de Page Fault
+(que corresponde a la interrupcion 14). Esto se debe a que lanzar dicha interrupcion es privilegiado, es decir, solo puede
+lanzarse desde modo kernel. Como el programa se corre en modo usuario, se genera la excepcion de proteccion general por intentar
+utilizar una instruccin privilegiada.
 
 
 user_evilhello
