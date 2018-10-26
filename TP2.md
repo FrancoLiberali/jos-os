@@ -25,3 +25,26 @@ gdb_hello
 ---------
 
 ...
+
+kern_idt
+---------
+
+...
+	Para algunas traps el procesador pushea automaticamente al stack un codigo de error. En esos casos, se debe utilizar
+TRAPHANDLER mientras que en los casos en los que no se debe utilizar TRAPHANDLER_NOEC ya que esta funcion pushea un $0 en el
+lugar donde deberia ir el codigo de error. Si se utilizara solo la primera, aquellas traps que no tienen codigo de error
+fallarian porque el stack no queda configurado de la manera que deberia segun la estructura de un TrapFrame.
+	El parametro istrap de la macro SETGATE define el comportamiento del manejo del problema. Si se trata de una interrupcion
+(istrap = 0), se resetea el valor de IF (interrupt-enable flag) lo cual previene que otras interrupciones interfieran con el
+manejo de la primera. Luego, cuando se ejecuta iret, se restaura el valor de IF al valor que tenia EFLAGS en el stack. Por otra
+parte, si se trata de una excepcion (istrap = 1), no se modifica el valor de IF.
+
+
+
+user_evilhello
+---------
+
+...
+	La diferencia entre estas versiones es que la primera utiliza directamente una direccion de memoria invalida como
+parametro para sys_cputs mientras que la segunda utiliza una direccion valida (la de la variable first) pero cuyo contenido es la
+direccion invalida.
