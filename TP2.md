@@ -21,34 +21,35 @@ env_free_list = e->env_link;
 donde e->env\_id = 0 ya que estos envs no fueron allocados nunca aún.
 ```
 1 << ENVGENSHIFT = 1 << 12 = 0x1000
-~(NENV - 1) = ~(1 << LOG2NENV - 1) = ~(1 << 10 - 1) = ~(0x400 - 1) = ~(0x3FF) = 0xFFFFFC00
+~(NENV - 1) = ~(1 << LOG2NENV - 1) = ~(1 << 10 - 1) 
+= ~(0x400 - 1) = ~(0x3FF) = 0xFFFFFC00
 (0 + 1 << ENVGENSHIFT) & ~(NENV - 1)} = 0x1000 & 0xFFFFFC00 = 0x1000
 generation = 0x1000
 ```
 Con i = 0...4
 ```
-e->env_id$_{i}$ = generation | (e - envs) = 0x1000 | i
-e->env_id$_{0}$ = 0x1000 | 0 = 0x1000
-e->env_id$_{1}$ = 0x1000 | 1 = 0x1001
-e->env_id$_{2}$ = 0x1000 | 2 = 0x1002
-e->env_id$_{3}$ = 0x1000 | 3 = 0x1003
-e->env_id$_{4}$ = 0x1000 | 4 = 0x1004
+e->env_id_i = generation | (e - envs) = 0x1000 | i
+e->env_id_0 = 0x1000 | 0 = 0x1000
+e->env_id_1 = 0x1000 | 1 = 0x1001
+e->env_id_2 = 0x1000 | 2 = 0x1002
+e->env_id_3 = 0x1000 | 3 = 0x1003
+e->env_id_4 = 0x1000 | 4 = 0x1004
 ```
 
 2. Supongamos que al arrancar el kernel se lanzan NENV procesos a ejecución. A continuación se destruye el proceso asociado a envs[630] y se lanza un proceso que cada segundo muere y se vuelve a lanzar. ¿Qué identificadores tendrá este proceso en sus sus primeras cinco ejecuciones?
-Para empezar, el e->env_id$_{630}$ = 0x1000 | 0x276 = 0x1276 la primera vez que se lanza.
+Para empezar, el e->env_id_630 = 0x1000 | 0x276 = 0x1276 la primera vez que se lanza.
 Siendo el subíndice la vez que se vuelve a allocar el envs[630]:
 ```
-generation$_{1}$ = (0x1276 + 0x1000) & 0xFFFFFC00 = 0x2276 & 0xFFFFFC00 = 0x2000
-e->env_id$_{1}$ = 0x2000 | 0x276 = 0x2276
-generation$_{2}$ = (0x2276 + 0x1000) & 0xFFFFFC00 = 0x3276 & 0xFFFFFC00 = 0x3000
-e->env_id$_{2}$ = 0x3000 | 0x276 = 0x3276
-generation$_{3}$ = (0x3276 + 0x1000) & 0xFFFFFC00 = 0x4276 & 0xFFFFFC00 = 0x4000
-e->env_id$_{3}$ = 0x4000 | 0x276 = 0x4276
-generation$_{4}$ = (0x4276 + 0x1000) & 0xFFFFFC00 = 0x5276 & 0xFFFFFC00 = 0x5000
-e->env_id$_{4}$ = 0x5000 | 0x276 = 0x5276
-generation$_{5}$ = (0x5276 + 0x1000) & 0xFFFFFC00 = 0x6276 & 0xFFFFFC00 = 0x6000
-e->env_id$_{5}$ = 0x6000 | 0x276 = 0x6276
+generation_1 = (0x1276 + 0x1000) & 0xFFFFFC00 = 0x2276 & 0xFFFFFC00 = 0x2000
+e->env_id_1 = 0x2000 | 0x276 = 0x2276
+generation_2 = (0x2276 + 0x1000) & 0xFFFFFC00 = 0x3276 & 0xFFFFFC00 = 0x3000
+e->env_id_2 = 0x3000 | 0x276 = 0x3276
+generation_3 = (0x3276 + 0x1000) & 0xFFFFFC00 = 0x4276 & 0xFFFFFC00 = 0x4000
+e->env_id_3 = 0x4000 | 0x276 = 0x4276
+generation_4 = (0x4276 + 0x1000) & 0xFFFFFC00 = 0x5276 & 0xFFFFFC00 = 0x5000
+e->env_id_4 = 0x5000 | 0x276 = 0x5276
+generation_5 = (0x5276 + 0x1000) & 0xFFFFFC00 = 0x6276 & 0xFFFFFC00 = 0x6000
+e->env_id_5 = 0x6000 | 0x276 = 0x6276
 ```
 
 env_init_percpu
@@ -254,4 +255,6 @@ Al correr make run-softint-nox se observa que se genero una excepcion del tipo G
 
 user_evilhello
 ---------
-La diferencia entre estas versiones es que la primera utiliza directamente una direccion de memoria invalida como parametro para sys_cputs mientras que la segunda utiliza una direccion valida (la de la variable first) pero cuyo contenido es la direccion invalida.
+La diferencia entre estas versiones es que la primera utiliza directamente una direccion de memoria invalida como parametro para sys_cputs, ya que 0xf010000c es una posición del kernel a la que un proceso de usuario no tiene acceso. La aquí sitada una direccion valida, ya que variable first se encuentra declarada en el stack de este proceso que intenta tener el contenido de la dirección invalida.
+
+Durante la ejecución lo que cambia es que la primera va a lograr su cometido ya que aún no disponemos de protección de memoria durante un syscall (la cual se agrega con user_mem_check) mientras que la aquí sitada no podrá. Esto se debe a que la de evilhello va a intentar acceder a la memoria del kernel durante un syscall, y durante la ejecución del mismo el sistema se encuentra en modo kernel porque lo que si no se hace la debido protección el kernel tendrá acceso a esa posición. Por su parte, la opción aqui sitada intentará leer el contenido de la posición del kernel directamente desreferenciando su puntero, por lo que la lectura de la posición se estará intentando hacer desde user mode, generando una page fault por la MMU.
