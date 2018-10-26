@@ -5,10 +5,8 @@ env_alloc
 ---------
 
 1. ¿Qué identificadores se asignan a los primeros 5 procesos creados? (Usar base hexadecimal.)
-
-	El código que se sigue para generar estos 5 identificadores es:
-    
-	```
+El código que se sigue para generar estos 5 identificadores es:
+```
 #define ENVGENSHIFT 12  // >= LOGNENV
 #define LOG2NENV		10
 #define NENV			(1 << LOG2NENV)
@@ -20,52 +18,38 @@ if (generation <= 0)  // Don't create a negative env_id.
 e->env_id = generation | (e - envs);
 env_free_list = e->env_link;
 ```
-
-	donde e->env\_id = 0 ya que estos envs no fueron allocados nunca aún.
-
-	```
-	1 << ENVGENSHIFT = 1 << 12 = 0x1000
-	~(NENV - 1) = ~(1 << LOG2NENV - 1) = ~(1 << 10 - 1) = ~(0x400 - 1) = ~(0x3FF) = 0xFFFFFC00
-	(0 + 1 << ENVGENSHIFT) & ~(NENV - 1)} = 0x1000 & 0xFFFFFC00 = 0x1000
-	generation = 0x1000
+donde e->env\_id = 0 ya que estos envs no fueron allocados nunca aún.
+```
+1 << ENVGENSHIFT = 1 << 12 = 0x1000
+~(NENV - 1) = ~(1 << LOG2NENV - 1) = ~(1 << 10 - 1) = ~(0x400 - 1) = ~(0x3FF) = 0xFFFFFC00
+(0 + 1 << ENVGENSHIFT) & ~(NENV - 1)} = 0x1000 & 0xFFFFFC00 = 0x1000
+generation = 0x1000
 ```
 Con i = 0...4
-
-	```
-	e->env_id$_{i}$ = generation | (e - envs) = 0x1000 | i
-	e->env_id$_{0}$ = 0x1000 | 0 = 0x1000
-	e->env_id$_{1}$ = 0x1000 | 1 = 0x1001
-	e->env_id$_{2}$ = 0x1000 | 2 = 0x1002
-	e->env_id$_{3}$ = 0x1000 | 3 = 0x1003
-	e->env_id$_{4}$ = 0x1000 | 4 = 0x1004
+```
+e->env_id$_{i}$ = generation | (e - envs) = 0x1000 | i
+e->env_id$_{0}$ = 0x1000 | 0 = 0x1000
+e->env_id$_{1}$ = 0x1000 | 1 = 0x1001
+e->env_id$_{2}$ = 0x1000 | 2 = 0x1002
+e->env_id$_{3}$ = 0x1000 | 3 = 0x1003
+e->env_id$_{4}$ = 0x1000 | 4 = 0x1004
 ```
 
 2. Supongamos que al arrancar el kernel se lanzan NENV procesos a ejecución. A continuación se destruye el proceso asociado a envs[630] y se lanza un proceso que cada segundo muere y se vuelve a lanzar. ¿Qué identificadores tendrá este proceso en sus sus primeras cinco ejecuciones?
-
-	Para empezar, el e->env_id$_{630}$ = 0x1000 | 0x276 = 0x1276 la primera vez que se lanza.
-	Siendo el subíndice la vez que se vuelve a allocar el envs[630]:
-    
-    ```
-	generation$_{1}$ = (0x1276 + 0x1000) & 0xFFFFFC00 = 0x2276 & 0xFFFFFC00 = 0x2000
-
-	e->env_id$_{1}$ = 0x2000 | 0x276 = 0x2276
-
-	generation$_{2}$ = (0x2276 + 0x1000) & 0xFFFFFC00 = 0x3276 & 0xFFFFFC00 = 0x3000
-
-	e->env_id$_{2}$ = 0x3000 | 0x276 = 0x3276
-
-	generation$_{3}$ = (0x3276 + 0x1000) & 0xFFFFFC00 = 0x4276 & 0xFFFFFC00 = 0x4000
-
-	e->env_id$_{3}$ = 0x4000 | 0x276 = 0x4276
-
-	generation$_{4}$ = (0x4276 + 0x1000) & 0xFFFFFC00 = 0x5276 & 0xFFFFFC00 = 0x5000
-
-	e->env_id$_{4}$ = 0x5000 | 0x276 = 0x5276
-
-	generation$_{5}$ = (0x5276 + 0x1000) & 0xFFFFFC00 = 0x6276 & 0xFFFFFC00 = 0x6000
-
-	e->env_id$_{5}$ = 0x6000 | 0x276 = 0x6276
-	```
+Para empezar, el e->env_id$_{630}$ = 0x1000 | 0x276 = 0x1276 la primera vez que se lanza.
+Siendo el subíndice la vez que se vuelve a allocar el envs[630]:
+```
+generation$_{1}$ = (0x1276 + 0x1000) & 0xFFFFFC00 = 0x2276 & 0xFFFFFC00 = 0x2000
+e->env_id$_{1}$ = 0x2000 | 0x276 = 0x2276
+generation$_{2}$ = (0x2276 + 0x1000) & 0xFFFFFC00 = 0x3276 & 0xFFFFFC00 = 0x3000
+e->env_id$_{2}$ = 0x3000 | 0x276 = 0x3276
+generation$_{3}$ = (0x3276 + 0x1000) & 0xFFFFFC00 = 0x4276 & 0xFFFFFC00 = 0x4000
+e->env_id$_{3}$ = 0x4000 | 0x276 = 0x4276
+generation$_{4}$ = (0x4276 + 0x1000) & 0xFFFFFC00 = 0x5276 & 0xFFFFFC00 = 0x5000
+e->env_id$_{4}$ = 0x5000 | 0x276 = 0x5276
+generation$_{5}$ = (0x5276 + 0x1000) & 0xFFFFFC00 = 0x6276 & 0xFFFFFC00 = 0x6000
+e->env_id$_{5}$ = 0x6000 | 0x276 = 0x6276
+```
 
 env_init_percpu
 ---------------
@@ -77,8 +61,10 @@ env_pop_tf
 
 1. ¿Qué hay en (%esp) tras el primer movl de la función?
 Tras el primer movl se encuentran los valores de todos los registros del procesador: edi, esi, ebp, oesp, ebx, edx, ecx y eax.
+
 2. ¿Qué hay en (%esp) justo antes de la instrucción iret? ¿Y en 8(%esp)?
 Antes de iret, %esp apunta a eip, el entry point del proceso que se va a ejecutar. En 8(%esp) se encuentran los eflags: los flags del environment que se va a ejecutar.
+
 3. ¿Cómo puede determinar la CPU si hay un cambio de ring (nivel de privilegio)?
 El cambio de nivel de privilegio se detecta mirando los ultimos bits de la entrada a la gdt. Un cero corresponde a modo kernel, un tres, a modo usuario.
 
@@ -100,7 +86,6 @@ Se asume que la arquitectura objetivo es i386
 => 0xf0102cf4 <env_pop_tf>:	push   %ebp
 Breakpoint 1, env_pop_tf (tf=0xf01d8000) at kern/env.c:478
 478	{
-(gdb) 
 ```
 
 2. En QEMU, entrar en modo monitor (Ctrl-a c), y mostrar las cinco primeras líneas del comando info registers.
