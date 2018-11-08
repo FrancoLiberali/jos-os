@@ -35,7 +35,7 @@ sched_yield(void)
 		idle = idle->env_link;
 	}
 	while (idle->env_status != ENV_RUNNABLE){
-		if ((curenv) && (idle == curenv){
+		if ((curenv) && (idle == curenv)){
 			if ((idle->env_status == ENV_RUNNING)) env_run(idle);
 			else break;
 		}
