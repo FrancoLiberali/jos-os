@@ -87,34 +87,38 @@ void simd_floating_point_exception();
 
 void syscall_trap();
 
+void irq_timer_trap();
+
 void
 trap_init(void)
 {
 	extern struct Segdesc gdt[];
 
 	// LAB 3: Your code here.
-	SETGATE(idt[T_DIVIDE], 1, GD_KT, (&divide_error), 3)
-	SETGATE(idt[T_DEBUG], 1, GD_KT, (&debug), 3)
+	SETGATE(idt[T_DIVIDE], 0, GD_KT, (&divide_error), 3)
+	SETGATE(idt[T_DEBUG], 0, GD_KT, (&debug), 3)
 	SETGATE(idt[T_NMI], 0, GD_KT, (&non_maskable_interrupt), 3)
-	SETGATE(idt[T_BRKPT], 1, GD_KT, (&breakpoint_trap), 3)
-	SETGATE(idt[T_OFLOW], 1, GD_KT, (&overflow), 3)
-	SETGATE(idt[T_BOUND], 1, GD_KT, (&bound_range_exceeded), 3)
-	SETGATE(idt[T_ILLOP], 1, GD_KT, (&invalid_opcode), 3)
-	SETGATE(idt[T_DEVICE], 1, GD_KT, (&device_not_available), 3)
-	SETGATE(idt[T_DBLFLT], 1, GD_KT, (&double_fault), 3)
-	/*SETGATE(idt[T_COPROC], 1, GD_KT, (&coprocessor_segent_overrun), 3)*/
-	SETGATE(idt[T_TSS], 1, GD_KT, (&invalid_tss), 3)
-	SETGATE(idt[T_SEGNP], 1, GD_KT, (&segment_not_present), 3)
-	SETGATE(idt[T_STACK], 1, GD_KT, (&stack_fault), 3)
-	SETGATE(idt[T_GPFLT], 1, GD_KT, (&general_protection), 3)
-	SETGATE(idt[T_PGFLT], 1, GD_KT, (&page_fault), 0)
-	/*SETGATE(idt[T_TRES], 1, GD_KT, (&unknown_trap), 3)*/
-	SETGATE(idt[T_FPERR], 1, GD_KT, (&x86_fpu_floating_point_error), 3)
+	SETGATE(idt[T_BRKPT], 0, GD_KT, (&breakpoint_trap), 3)
+	SETGATE(idt[T_OFLOW], 0, GD_KT, (&overflow), 3)
+	SETGATE(idt[T_BOUND], 0, GD_KT, (&bound_range_exceeded), 3)
+	SETGATE(idt[T_ILLOP], 0, GD_KT, (&invalid_opcode), 3)
+	SETGATE(idt[T_DEVICE], 0, GD_KT, (&device_not_available), 3)
+	SETGATE(idt[T_DBLFLT], 0, GD_KT, (&double_fault), 3)
+	/*SETGATE(idt[T_COPROC], 0, GD_KT, (&coprocessor_segent_overrun), 3)*/
+	SETGATE(idt[T_TSS], 0, GD_KT, (&invalid_tss), 3)
+	SETGATE(idt[T_SEGNP], 0, GD_KT, (&segment_not_present), 3)
+	SETGATE(idt[T_STACK], 0, GD_KT, (&stack_fault), 3)
+	SETGATE(idt[T_GPFLT], 0, GD_KT, (&general_protection), 3)
+	SETGATE(idt[T_PGFLT], 0, GD_KT, (&page_fault), 0)
+	/*SETGATE(idt[T_TRES], 0, GD_KT, (&unknown_trap), 3)*/
+	SETGATE(idt[T_FPERR], 0, GD_KT, (&x86_fpu_floating_point_error), 3)
 	SETGATE(idt[T_ALIGN], 0, GD_KT, (&alignment_check), 3)
 	SETGATE(idt[T_MCHK], 0, GD_KT, (&machine_check), 3)
 	SETGATE(idt[T_SIMDERR], 0, GD_KT, (&simd_floating_point_exception), 3)
 
-	SETGATE(idt[T_SYSCALL], 1, GD_KT, (&syscall_trap), 3)
+	SETGATE(idt[T_SYSCALL], 0, GD_KT, (&syscall_trap), 3)
+
+	SETGATE(idt[IRQ_OFFSET + IRQ_TIMER], 0, GD_KT, (&irq_timer_trap), 3)
 
 	// Per-CPU setup
 	trap_init_percpu();
@@ -246,6 +250,10 @@ trap_dispatch(struct Trapframe *tf)
 	// Handle clock interrupts. Don't forget to acknowledge the
 	// interrupt using lapic_eoi() before calling the scheduler!
 	// LAB 4: Your code here.
+	if (tf->tf_trapno == IRQ_OFFSET + IRQ_TIMER) {
+		lapic_eoi();
+		sched_yield();
+	}
 
 	// Unexpected trap: The user process or the kernel has a bug.
 	print_trapframe(tf);

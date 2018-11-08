@@ -69,6 +69,8 @@ TRAPHANDLER_NOEC(machine_check, T_MCHK);
 TRAPHANDLER_NOEC(simd_floating_point_exception, T_SIMDERR);
 
 TRAPHANDLER_NOEC(syscall_trap, T_SYSCALL);
+
+TRAPHANDLER_NOEC(irq_timer_trap, IRQ_OFFSET + IRQ_TIMER);
 /*
  * Lab 3: Your code here for _alltraps
  */
