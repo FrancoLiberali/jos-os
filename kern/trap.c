@@ -117,8 +117,8 @@ trap_init(void)
 	SETGATE(idt[T_SIMDERR], 0, GD_KT, (&simd_floating_point_exception), 3)
 
 	SETGATE(idt[T_SYSCALL], 0, GD_KT, (&syscall_trap), 3)
-		
-	SETGATE(idt[IRQ_OFFSET+IRQ_TIMER], 0, GD_KT, (&irq_timer), 3)
+
+	SETGATE(idt[IRQ_OFFSET + IRQ_TIMER], 0, GD_KT, (&irq_timer), 3)
 
 	// Per-CPU setup
 	trap_init_percpu();

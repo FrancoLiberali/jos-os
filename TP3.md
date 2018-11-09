@@ -117,4 +117,17 @@ K> QEMU: Terminated
 
 Como vemos, al principio se crea el env 00001000, entra en el for y hace sys_yield. Esto hace que el siguiente en la lista de envs sea 00001001, quien se crea, entra en el for y hace sys_yield. El env 00001002 hace lo mismo. Cuando este ultimo hace sys_yield, el siguiente en la lista es nuevamente 00001000, haciendo que se corran sucesivamente una vez cada uno, hasta terminar las iteraciones y destruirse en el mismo orden que se crearon.
 
+envid2env
+---------
+¿Qué ocurre en JOS, si un proceso llama a sys_env_destroy(0)?
+Al usar el envid en 0 como parametro se procederá a destruir el proceso actual, es decir el mismo que realizó esta syscall. Esto se interpreta como que el proceso terminó correctamente su ejecución y desea simplemente terminar.
+
+¿Qué ocurre en Linux, si un proceso llama a kill(0, 9)?
+Ya que el pid es 0, se enviará la señal 9, es decir, la señal de kill, a todos los procesos que esten en el mismo grupo que el proceso que lo llama. Este grupo incluye al proceso actual y cualquier proceso que hizo fork desde o a el proceso actual ("padres e hijos").
+
+¿Qué ocurre en JOS, si un proceso llama a sys_env_destroy(-1)?
+Al llamar a sys_env_destroy con este envid, se llamará a envid2env con el envid -1, resultando que chequeará si el ultimo env del arreglo de envs (envs[NENV-1]) tiene el envid -1, lo cual es imposible porque al allocar los envs nunca se genera un envid negativo, resultando en error.
+
+¿Qué ocurre en Linux, si un proceso llama a kill(-1, 9)?
+Si el pid es -1, la señal es enviada a todos los procesos a los cuales el proceso acctual tiene permiso de enviar señales, excepto por el proceso 1-init. De este manera se matarian todos los procesos para los que se tiene permisos.
 
