@@ -58,6 +58,94 @@ duppage(envid_t envid, unsigned pn)
 	return 0;
 }
 
+static void
+dup_or_share(envid_t dstenv, void *va, int perm)
+{
+	if (perm & PTE_W) {
+		int r;
+
+		if ((r = sys_page_alloc(dstenv, va, perm)) < 0)
+			panic("sys_page_alloc: %e", r);
+		if ((r = sys_page_map(dstenv, va, 0, UTEMP, perm)) < 0)
+			panic("sys_page_map: %e", r);
+		memmove(UTEMP, va, PGSIZE);
+		if ((r = sys_page_unmap(0, UTEMP)) < 0)
+			panic("sys_page_unmap: %e", r);
+	} else {
+		int r;
+
+		if ((r = sys_page_map(0, va, dstenv, va, perm)) < 0)
+			panic("sys_page_map: %e", r);
+	}
+}
+
+envid_t
+fork_v0(void)
+{
+	envid_t envid;
+	uint8_t *addr;
+	int r;
+
+	// Allocate a new child environment.
+	// The kernel will initialize it with a copy of our register state,
+	// so that the child will appear to have called sys_exofork() too -
+	// except that in the child, this "fake" call to sys_exofork()
+	// will return 0 instead of the envid of the child.
+	envid = sys_exofork();
+	if (envid < 0)
+		panic("sys_exofork: %e", envid);
+	if (envid == 0) {
+		// We're the child.
+		// The copied value of the global variable 'thisenv'
+		// is no longer valid (it refers to the parent!).
+		// Fix it and return 0.
+		thisenv = &envs[ENVX(sys_getenvid())];
+		return 0;
+	}
+
+	// We're the parent.
+	// Eagerly copy our entire address space into the child.
+	for (addr = (uint8_t *) UTEXT; addr < (uint8_t *) UTOP; addr += PGSIZE) {
+		// more info:
+		// https://pdos.csail.mit.edu/6.828/2017/labs/lab4/uvpt.html
+		// uvpt = UVPT = EF400000
+		// uvpd = (UVPT+(UVPT>>12)*4) = EF7BD000
+		// uvpd leet us enter to the page dir with two levels of
+		// inderection,
+		// because PDX(uvpt) is index of
+		// the recursively inserted PD in itself
+		// and PTX(uvpt) is index of
+		// the recursively inserted PD in itself too
+		// So it leet us in the physical PD
+		// PDX(addr) * 4 in the offset to go to the pde of the pt of
+		// addr(* 4 because of the size of the pde's)
+		pde_t *pde =
+		        (pde_t *) (PGADDR(PDX(uvpd), PTX(uvpd), (PDX(addr) * 4)));
+		// if the pt of addr was present
+		if ((*pde) & PTE_P) {
+			// uvpt leet us enter to the page dir, because PDX(uvpt)
+			// is index of
+			// the recursively inserted PD in itself
+			// PDX(addr) as PTX to index in the PD with the PDX, so
+			// it leet us in the physical PT where addr is
+			// PTX(addr) * 4 in the offset to go to the pte of
+			// addr(* 4 because of
+			// the size of the pte's)
+			pte_t *pte = (pte_t *) (PGADDR(
+			        PDX(uvpt), PDX(addr), (PTX(addr) * 4)));
+			// if the page of addr was present
+			if ((*pte) & PTE_P)
+				dup_or_share(envid, addr, (*pte) & PTE_SYSCALL);
+		}
+	}
+
+	// Start the child environment running
+	if ((r = sys_env_set_status(envid, ENV_RUNNABLE)) < 0)
+		panic("sys_env_set_status: %e", r);
+
+	return envid;
+}
+
 //
 // User-level fork with copy-on-write.
 // Set up our page fault handler appropriately.
@@ -78,7 +166,7 @@ envid_t
 fork(void)
 {
 	// LAB 4: Your code here.
-	panic("fork not implemented");
+	return fork_v0();
 }
 
 // Challenge!

@@ -91,7 +91,7 @@ sys_exofork(void)
 		return err;
 	e->env_status = ENV_NOT_RUNNABLE;
 	e->env_tf = curenv->env_tf;
-	//return 0 to the child
+	// return 0 to the child
 	e->env_tf.tf_regs.reg_eax = 0;
 	return e->env_id;
 }
@@ -242,6 +242,7 @@ sys_page_map(envid_t srcenvid, void *srcva, envid_t dstenvid, void *dstva, int p
 	struct PageInfo *pp = page_lookup(srce->env_pgdir, srcva, &pte);
 	if (!pp)
 		return -E_INVAL;
+
 	if (!(*pte & PTE_W) && (perm & PTE_W))
 		return -E_INVAL;
 
@@ -362,11 +363,15 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 	case SYS_yield:
 		sched_yield();
 	case SYS_page_alloc:
-		return sys_page_alloc((envid_t) a1, (void*) a2, (int) a3);
+		return sys_page_alloc((envid_t) a1, (void *) a2, (int) a3);
 	case SYS_page_map:
-		return sys_page_map((envid_t) a1, (void*) a2, (envid_t) a3, (void*) a4, (int) a5);
+		return sys_page_map((envid_t) a1,
+		                    (void *) a2,
+		                    (envid_t) a3,
+		                    (void *) a4,
+		                    (int) a5);
 	case SYS_page_unmap:
-		return sys_page_unmap((envid_t) a1, (void*) a2);
+		return sys_page_unmap((envid_t) a1, (void *) a2);
 	case SYS_exofork:
 		return sys_exofork();
 	case SYS_env_set_status:
