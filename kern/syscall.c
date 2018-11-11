@@ -320,7 +320,45 @@ static int
 sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 {
 	// LAB 4: Your code here.
-	panic("sys_ipc_try_send not implemented");
+	int r;
+	struct Env* e;
+
+	if ((r = envid2env(envid, &e, 0)) < 0)
+		return r;
+
+	if ((!e->env_ipc_recving))/* || (another environment managed to send first)*/
+		return -E_IPC_NOT_RECV;
+
+	if (srcva < (void*) UTOP){
+
+		//if the reveiver wants to receive a page
+		// If 'dstva' is < UTOP, then you are willing to receive a page of data.
+		if (e->env_ipc_dstva < (void*) UTOP){ //creo que es redundante la comparacion
+			if (((uintptr_t) srcva % PGSIZE != 0) || ((perm | PTE_SYSCALL) != PTE_SYSCALL))
+				return -E_INVAL;
+
+			pte_t *pte = (pte_t *) 0x1;
+			struct PageInfo *pp = page_lookup(e->env_pgdir, srcva, &pte);
+			if (!pp) 
+				return -E_INVAL;
+
+			if (!(*pte & PTE_W) && (perm & PTE_W))
+				return -E_INVAL;
+
+			if ((r = page_insert(e->env_pgdir, pp, srcva, perm | PTE_U | PTE_P)) < 0)
+				return r;
+			
+			e->env_ipc_perm = perm;
+		}
+	}
+
+	e->env_ipc_recving = false;
+	e->env_ipc_from = curenv->env_id;
+	e->env_ipc_value = value;
+	if (e->env_ipc_perm != perm) e->env_ipc_perm = 0;
+	e->env_status = ENV_RUNNABLE;
+
+	return 0;
 }
 
 // Block until a value is ready.  Record that you want to receive
@@ -338,7 +376,13 @@ static int
 sys_ipc_recv(void *dstva)
 {
 	// LAB 4: Your code here.
-	panic("sys_ipc_recv not implemented");
+	if (dstva < (void*) UTOP){
+		if ((uintptr_t) dstva % PGSIZE != 0) return -E_INVAL;
+		curenv->env_ipc_dstva = dstva;
+	}
+	curenv->env_ipc_recving = true;
+	curenv->env_status = ENV_NOT_RUNNABLE;
+	sched_yield();
 	return 0;
 }
 
