@@ -138,7 +138,14 @@ static int
 sys_env_set_pgfault_upcall(envid_t envid, void *func)
 {
 	// LAB 4: Your code here.
-	panic("sys_env_set_pgfault_upcall not implemented");
+	int r;
+	struct Env *e;
+
+	if ((r = envid2env(envid, &e, 1)) < 0)
+		return r;
+
+	e->env_pgfault_upcall = func;
+	return 0;
 }
 
 // Allocate a page of memory and map it at 'va' with permission
@@ -246,8 +253,10 @@ sys_page_map(envid_t srcenvid, void *srcva, envid_t dstenvid, void *dstva, int p
 	if (!(*pte & PTE_W) && (perm & PTE_W))
 		return -E_INVAL;
 
-	if ((r = page_insert(dste->env_pgdir, pp, dstva, perm | PTE_U | PTE_P)) < 0)
+	if ((r = page_insert(dste->env_pgdir, pp, dstva, perm | PTE_U | PTE_P)) < 0) {
+		page_free(pp);
 		return r;
+	}
 
 	return 0;
 }
@@ -345,9 +354,11 @@ sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 			if (!(*pte & PTE_W) && (perm & PTE_W))
 				return -E_INVAL;
 
-			if ((r = page_insert(e->env_pgdir, pp, srcva, perm | PTE_U | PTE_P)) < 0)
+			if ((r = page_insert(e->env_pgdir, pp, srcva, perm | PTE_U | PTE_P)) < 0) {
+				page_free(pp);
 				return r;
-			
+			}
+
 			e->env_ipc_perm = perm;
 		}
 	}
@@ -420,6 +431,12 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 		return sys_exofork();
 	case SYS_env_set_status:
 		return sys_env_set_status((envid_t) a1, (int) a2);
+	case SYS_ipc_try_send:
+		return sys_ipc_try_send((envid_t) a1, (uint32_t) a2, (void*) a3, (unsigned) a4);
+	case SYS_ipc_recv:
+		return sys_ipc_recv((void*) a1);
+	case SYS_env_set_pgfault_upcall:
+		return sys_env_set_pgfault_upcall((envid_t) a1, (void*) a2);
 	default:
 		return -E_INVAL;
 	}
