@@ -110,29 +110,30 @@ fork_v0(void)
 		// https://pdos.csail.mit.edu/6.828/2017/labs/lab4/uvpt.html
 		// uvpt = UVPT = EF400000
 		// uvpd = (UVPT+(UVPT>>12)*4) = EF7BD000
-		// uvpd leet us enter to the page dir with two levels of
-		// inderection,
+		// uvpd let us enter to the page dir with two levels of
+		// indirection,
 		// because PDX(uvpt) is index of
 		// the recursively inserted PD in itself
 		// and PTX(uvpt) is index of
 		// the recursively inserted PD in itself too
-		// So it leet us in the physical PD
+		// So it let us in the physical PD
 		// PDX(addr) * 4 in the offset to go to the pde of the pt of
 		// addr(* 4 because of the size of the pde's)
-		pde_t *pde =
-		        (pde_t *) (PGADDR(PDX(uvpd), PTX(uvpd), (PDX(addr) * 4)));
+		pde_t *pde = (pde_t *) (PGADDR(
+		        PDX(uvpd), PTX(uvpd), (PDX(addr) * sizeof(pde_t))));
 		// if the pt of addr was present
 		if ((*pde) & PTE_P) {
 			// uvpt leet us enter to the page dir, because PDX(uvpt)
 			// is index of
 			// the recursively inserted PD in itself
 			// PDX(addr) as PTX to index in the PD with the PDX, so
-			// it leet us in the physical PT where addr is
+			// it let us in the physical PT where addr is
 			// PTX(addr) * 4 in the offset to go to the pte of
-			// addr(* 4 because of
-			// the size of the pte's)
-			pte_t *pte = (pte_t *) (PGADDR(
-			        PDX(uvpt), PDX(addr), (PTX(addr) * 4)));
+			// addr(* the size of the pte's)
+			pte_t *pte =
+			        (pte_t *) (PGADDR(PDX(uvpt),
+			                          PDX(addr),
+			                          (PTX(addr) * sizeof(pte_t))));
 			// if the page of addr was present
 			if ((*pte) & PTE_P)
 				dup_or_share(envid, addr, (*pte) & PTE_SYSCALL);
