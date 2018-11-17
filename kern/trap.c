@@ -291,6 +291,7 @@ trap(struct Trapframe *tf)
 		// Acquire the big kernel lock before doing any
 		// serious kernel work.
 		// LAB 4: Your code here.
+		lock_kernel();
 		assert(curenv);
 
 		// Garbage collect if current enviroment is a zombie
@@ -371,6 +372,28 @@ page_fault_handler(struct Trapframe *tf)
 	//   (the 'tf' variable points at 'curenv->env_tf').
 
 	// LAB 4: Your code here.
+	if (curenv->env_pgfault_upcall) {
+	
+		struct UTrapframe *u;
+
+		//llamadaS? a user_mem_assert?
+		user_mem_assert(curenv,(void*)UXSTACKTOP,PGSIZE,0);
+
+		//u = ...; (?
+
+		u->utf_fault_va = fault_va;
+		u->utf_err = tf->tf_err;
+		u->utf_regs = tf->tf_regs;
+		u->utf_eip = tf->tf_eip;
+		u->utf_eflags = tf->tf_eflags;
+		u->utf_esp = tf->tf_esp;
+
+		tf->tf_eip = (uintptr_t) curenv->env_pgfault_upcall;
+		//tf->ef_esp = ?;
+
+		//env_run(???);
+
+	}
 
 	// Destroy the environment that caused the fault.
 	cprintf("[%08x] user fault va %08x ip %08x\n",
