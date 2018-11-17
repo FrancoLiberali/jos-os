@@ -11,7 +11,6 @@ umain(int argc, char **argv)
 {
 	envid_t who;
 	int i;
-	sys_page_alloc(0, (void*)0x802000+PGSIZE, PTE_W);
 	// fork a child process
 	who = dumbfork();
 
@@ -65,11 +64,8 @@ dumbfork(void)
 	// We're the parent.
 	// Eagerly copy our entire address space into the child.
 	// This is NOT what you should do in your fork implementation.
-	cprintf("end: %p\n", end);
-	for (addr = (uint8_t*) UTEXT; addr < end; addr += PGSIZE){
-		cprintf("addr: %p\n", addr);
+	for (addr = (uint8_t*) UTEXT; addr < end; addr += PGSIZE)
 		duppage(envid, addr);
-	}
 
 	// Also copy the stack we are currently running on.
 	duppage(envid, ROUNDDOWN(&addr, PGSIZE));
