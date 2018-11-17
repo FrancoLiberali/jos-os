@@ -123,13 +123,12 @@ fork_v0(void)
 		        PDX(uvpd), PTX(uvpd), (PDX(addr) * sizeof(pde_t))));
 		// if the pt of addr was present
 		if ((*pde) & PTE_P) {
-			// uvpt leet us enter to the page dir, because PDX(uvpt)
+			// uvpt let us enter to the page dir, because PDX(uvpt)
 			// is index of
 			// the recursively inserted PD in itself
 			// PDX(addr) as PTX to index in the PD with the PDX, so
 			// it let us in the physical PT where addr is
-			// PTX(addr) * 4 in the offset to go to the pte of
-			// addr(* the size of the pte's)
+			// PTX(addr) * the size of the pte's)
 			pte_t *pte =
 			        (pte_t *) (PGADDR(PDX(uvpt),
 			                          PDX(addr),

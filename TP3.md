@@ -131,3 +131,59 @@ Al llamar a sys_env_destroy con este envid, se llamará a envid2env con el envid
 ¿Qué ocurre en Linux, si un proceso llama a kill(-1, 9)?
 Si el pid es -1, la señal es enviada a todos los procesos a los cuales el proceso acctual tiene permiso de enviar señales, excepto por el proceso 1-init. De este manera se matarian todos los procesos para los que se tiene permisos.
 
+dumbfork
+--------
+
+1. Si, antes de llamar a dumbfork(), el proceso se reserva a sí mismo una página con sys_page_alloc() ¿se propagará una copia al proceso hijo? ¿Por qué?.
+
+	Realizar un llamado a sys_page_alloc previo a dumbfork no propagará una copia de la nueva pagina en el proceso hijo, ya que las paginas de memoria que se copian son las que estan entre UTEXT y end, de manera que se busca copiar solo el codigo del proceso. Luego tambien se copia la ultima página del stack, pero las paginas a copiar son fijas y no se copian demas páginas que no sean codigo o la ultima del stack.
+
+2. ¿Se preserva el estado de solo-lectura en las páginas copiadas? Mostrar, con código en espacio de usuario, cómo saber si una dirección de memoria es modificable por el proceso, o no. (Ayuda: usar las variables globales uvpd y/o uvpt.)
+
+	No se preserva el estado de solo-lectura de las páginas copiadas, ya que las paǵinas se allocan con sys_page_alloc(dstenv, addr, PTE_P|PTE_U|PTE_W) y como vemos se le ponen permisos de escritura a todas las páginas del nuevo proceso.
+    Para saber si una dirección de memoria addr es modificable por el proceso o no, podemos utilizar el siguiente codigo.
+    ```
+    pde_t *pde = (pde_t *) (PGADDR(
+		        PDX(uvpd), PTX(uvpd), (PDX(addr) * sizeof(pde_t))));
+	// if the pt of addr was present, 
+    // and with user and write permitions.
+	if ((*pde) & (PTE_P | PTE_U | PTE_W)) {
+		// uvpt let us enter to the page dir, because PDX(uvpt)
+		// is index of
+		// the recursively inserted PD in itself
+		// PDX(addr) as PTX to index in the PD with the PDX, so
+		// it let us in the physical PT where addr is
+		// PTX(addr) * the size of the pte's)
+		pte_t *pte =
+		        (pte_t *) (PGADDR(PDX(uvpt),
+		                          PDX(addr),
+		                          (PTX(addr) * sizeof(pte_t))));
+		// if the page of addr was present,
+   		// and with user and write permitions.
+		if ((*pte) & (PTE_P | PTE_U | PTE_W))
+			return true;
+	return false;
+    ```
+3. Describir el funcionamiento de la función duppage().
+	La función dubppage, conta de tres pasos:
+    * Allocar una nueva página en el nuevo proceso comenzando en la misma dirección que la que se quiere copiar del proceso padre(addr) con sys_page_alloc(dstenv, addr, PTE_P|PTE_U|PTE_W), dandole permiso de usuario y escritura.
+    * Mapear la página virtual que comienza una dirección temporal (UTEMP) del espacio de direcciones del proceso padre a la misma página página fisica que la que tiene mapeada la página virtual que comienza en la dirección addr del proceso hijo, la cual fue allocada en esa página fisica en el proceso anterior. Esta acción se hace con sys_page_map(dstenv, addr, 0, UTEMP, PTE_P|PTE_U|PTE_W), y como vemos se mapea esta dirección temporal con permisos de escritura. 
+    * Copiar el contenido del largo de una página(PGSIZE) de la posición addr del proceso padre en la dirección temporal UTEMP de este mismo proceso y, ya que esta comparte la página fisica con la dirección addr del proceso hijo, al escribir en esta página virtual del proceso padre se escribe también la del hijo. Esto se hace con memmove(UTEMP, addr, PGSIZE);
+    * Desmapear la página virtual temporal del proceso padre, para que deje de apuntar a la misma página fisica que el proceso hijo. Esto se hace con sys_page_unmap(0, UTEMP).
+
+4. Supongamos que se añade a duppage() un argumento booleano que indica si la página debe quedar como solo-lectura en el proceso hijo:
+
+	* Indicar qué llamada adicional se debería hacer si el booleano es true:
+	```
+	sys_page_map(dstenv, addr, dstenv, addr, PTE_P|PTE_U);
+    ```
+    Para reinsertar la misma página fisica en la direccion addr con permisos distintos.
+    
+    * Describir un algoritmo alternativo que no aumente el número de llamadas al sistema, que debe quedar en 3 (1 × alloc, 1 × map, 1 × unmap).
+    La manera alternativa podria ser la propuesta por la catedra para fork_v0, en los casos que la página tenga permisos de escritura hacer este mismo proceso y si era de solo lectura simplemente mapear la dirección del nuevo proceso a la misma página fisica del proceso padre.
+    
+5. ¿Por qué se usa ROUNDDOWN(&addr) para copiar el stack? ¿Qué es addr y por qué, si el stack crece hacia abajo, se usa ROUNDDOWN y no ROUNDUP?
+	Para copiar el stack nos basamos en &addr ya que addr es una variable local de la función dumfork que existe en el stack, y por lo tanto su posición de memoria corresponde a una del stack. El uso de ROUNDDOWN es porque la dirección de inicio de todas las páginas virtuales donde este contenida una dirección es el ROUNDOWN ya que la página empieza donde el offset es cero. Esto, es independiente a que esta dirección sea del stack, ROUNDUP de una dirección siempre nos da el inicio de la paǵina siguiente, y si estamos en el stack esto nos daría la paǵina anterior del stack. De esta manera, para que el stack crezca hacia abajo, las paǵinas del mismo se deben utilizar de arriba hacia abajo pero el inicio de la paǵina sigue siendo la dirección más baja de la misma. 
+
+
+

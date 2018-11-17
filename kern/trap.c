@@ -373,13 +373,12 @@ page_fault_handler(struct Trapframe *tf)
 
 	// LAB 4: Your code here.
 	if (curenv->env_pgfault_upcall) {
-	
 		struct UTrapframe *u;
 
-		//llamadaS? a user_mem_assert?
-		user_mem_assert(curenv,(void*)UXSTACKTOP,PGSIZE,0);
+		// llamadaS? a user_mem_assert?
+		user_mem_assert(curenv, (void *) UXSTACKTOP, PGSIZE, 0);
 
-		//u = ...; (?
+		// u = ...; (?
 
 		u->utf_fault_va = fault_va;
 		u->utf_err = tf->tf_err;
@@ -389,10 +388,9 @@ page_fault_handler(struct Trapframe *tf)
 		u->utf_esp = tf->tf_esp;
 
 		tf->tf_eip = (uintptr_t) curenv->env_pgfault_upcall;
-		//tf->ef_esp = ?;
+		// tf->ef_esp = ?;
 
-		//env_run(???);
-
+		// env_run(???);
 	}
 
 	// Destroy the environment that caused the fault.
