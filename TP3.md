@@ -184,6 +184,167 @@ dumbfork
     
 5. ¿Por qué se usa ROUNDDOWN(&addr) para copiar el stack? ¿Qué es addr y por qué, si el stack crece hacia abajo, se usa ROUNDDOWN y no ROUNDUP?
 	Para copiar el stack nos basamos en &addr ya que addr es una variable local de la función dumfork que existe en el stack, y por lo tanto su posición de memoria corresponde a una del stack. El uso de ROUNDDOWN es porque la dirección de inicio de todas las páginas virtuales donde este contenida una dirección es el ROUNDOWN ya que la página empieza donde el offset es cero. Esto, es independiente a que esta dirección sea del stack, ROUNDUP de una dirección siempre nos da el inicio de la paǵina siguiente, y si estamos en el stack esto nos daría la paǵina anterior del stack. De esta manera, para que el stack crezca hacia abajo, las paǵinas del mismo se deben utilizar de arriba hacia abajo pero el inicio de la paǵina sigue siendo la dirección más baja de la misma. 
+    
+    
+multicore_init
+--------------
+
+1. ¿Qué código copia, y a dónde, la siguiente línea de la función boot_aps()?
+	```
+    memmove(code, mpentry_start, mpentry_end - mpentry_start);
+    ```
+   Para empezar, code es KADDR(MPENTRY_PADDR), es decir, la dirección virtual por encima del KERNBASE que mapea con la dirección fisica MPENTRY_PADDR. Al ejecutar el memmove, lo que hacemos es copiar en la dirección virtual code, y por lo tanto en la dirección fisica MPENTRY_PADDR, el contenido de la dirección mpentry_start hasta el final ya que el largo es mpentry_end - mpentry_start. En la dirección mpentry_start se encuentran las instrucciones de mpentry.S, la ejecución que debe realizar un AP al cargarse. Por esta razón, la dirección virtual code es el punto de entrada de los los AP's y cuando se les indique cargarse se les enviará la dirección fisica que esta representa para que inicien allí.
+
+2. ¿Para qué se usa la variable global mpentry_kstack? ¿Qué ocurriría si el espacio para este stack se reservara en el archivo kern/mpentry.S, de manera similar a bootstack en el archivo kern/entry.S?
+
+	La variable global mpentry_kstack se usa para, a la hora de iniciar un AP, tener una referencia al stack que este CPU debe utilizar. Estos stacks se encuentran definidos por percpu_kstacks, y mpentry_kstack simplemente apunta al que le correponda al CPU que se esta inicializando según su ID.
+
+	Si este stack se reservara en el archivo kern/mpentry.S, dicho esta stack solo se reservaría una vez y todos los AP's intentarian utilizar ese mismo stack, ya este codigo de carga se copia una vez sola en la memoria real y todos los AP's lo ejecutarán desde allí (MPENTRY_PADDR). Por eso, los stacks para cada CPU son pre-alocados
+    
+3. Cuando QEMU corre con múltiples CPUs, éstas se muestran en GDB como hilos de ejecución separados. Mostrar una sesión de GDB en la que se muestre cómo va cambiando el valor de la variable global mpentry_kstack.
+	```
+    $make gdb
+	gdb -q -s obj/kern/kernel -ex 'target remote 127.0.0.1:26000' -n -x .gdbinit
+	Leyendo símbolos desde obj/kern/kernel...hecho.
+	Remote debugging using 127.0.0.1:26000
+	0x0000fff0 in ?? ()
+	(gdb) watch mpentry_kstack
+	Hardware watchpoint 1: mpentry_kstack
+	(gdb) continue
+	Continuando.
+	Se asume que la arquitectura objetivo es i386
+	=> 0xf0100186 <boot_aps+108>:	mov    %esi,%ecx
+
+	Thread 1 hit Hardware watchpoint 1: mpentry_kstack
+
+	Old value = (void *) 0x0
+	New value = (void *) 0xf0247000 <percpu_kstacks+65536>
+	boot_aps () at kern/init.c:105
+	105			lapic_startap(c->cpu_id, PADDR(code));
+	(gdb) bt
+	#0  boot_aps () at kern/init.c:105
+	#1  0xf0100225 in i386_init () at kern/init.c:56
+	#2  0xf0100047 in relocated () at kern/entry.S:88
+	(gdb) info threads
+  	Id   Target Id         Frame 
+	* 1    Thread 1 (CPU#0 [running]) boot_aps () at kern/init.c:105
+  	2    Thread 2 (CPU#1 [halted ]) 0x000fd3fa in ?? ()
+  	3    Thread 3 (CPU#2 [halted ]) 0x000fd3fa in ?? ()
+  	4    Thread 4 (CPU#3 [halted ]) 0x000fd3fa in ?? ()
+	(gdb) continue
+	Continuando.
+	=> 0xf0100186 <boot_aps+108>:	mov    %esi,%ecx
+
+	Thread 1 hit Hardware watchpoint 1: mpentry_kstack
+
+	Old value = (void *) 0xf0247000 <percpu_kstacks+65536>
+	New value = (void *) 0xf024f000 <percpu_kstacks+98304>
+	boot_aps () at kern/init.c:105
+	105			lapic_startap(c->cpu_id, PADDR(code));
+	(gdb) info threads
+  	Id   Target Id         Frame 
+	* 1    Thread 1 (CPU#0 [running]) boot_aps () at kern/init.c:105
+  	2    Thread 2 (CPU#1 [running]) 0xf01002b3 in mp_main () at kern/init.c:123
+  	3    Thread 3 (CPU#2 [halted ]) 0x000fd3fa in ?? ()
+  	4    Thread 4 (CPU#3 [halted ]) 0x000fd3fa in ?? ()
+	(gdb) thread 2
+	[Switching to thread 2 (Thread 2)]
+	#0  0xf01002b3 in mp_main () at kern/init.c:123
+	123		xchg(&thiscpu->cpu_status, CPU_STARTED); // tell boot_aps() we're up
+	(gdb) bt
+	#0  0xf01002b3 in mp_main () at kern/init.c:123
+	#1  0x00007060 in ?? ()
+	(gdb) p cpunum()
+	$1 = 1
+	(gdb) thread 1
+	[Switching to thread 1 (Thread 1)]
+	#0  boot_aps () at kern/init.c:107
+	107			while(c->cpu_status != CPU_STARTED)
+	(gdb) p cpunum()
+	$2 = 0
+	(gdb) continue
+	Continuando.
+	=> 0xf0100186 <boot_aps+108>:	mov    %esi,%ecx
+
+	Thread 1 hit Hardware watchpoint 1: mpentry_kstack
+
+	Old value = (void *) 0xf024f000 <percpu_kstacks+98304>
+	New value = (void *) 0xf0257000 <percpu_kstacks+131072>
+	boot_aps () at kern/init.c:105
+	105			lapic_startap(c->cpu_id, PADDR(code));
+	```
+    
+4. * ¿Qué valor tiene el registro %eip cuando se ejecuta esa línea?
+	El registro %eip tiene el valor 0x7032, ya que este codigo se esta ejecutando en la memoria cargada en MPENTRY_PADDR para el booteo de CPU's.
+   * ¿Se detiene en algún momento la ejecución si se pone un breakpoint en mpentry_start? ¿Por qué?
+    No, no se detiene la ejecución. Esto se debe a que cuando ponemos un breakpont directamente sobre mpentry_start lo haremos en la posición donde este codigo quedó compilado y linkeado, pero el que se va a ejecutar realmente es una copia de este mismo que se encuentra en MPENTRY_PADDR.
+
+5. Con GDB, mostrar el valor exacto de %eip y mpentry_kstack cuando se ejecuta la instrucción anterior en el último AP.
+	```
+    $ make gdb
+	gdb -q -s obj/kern/kernel -ex 'target remote 127.0.0.1:26000' -n -x .gdbinit
+	Leyendo símbolos desde obj/kern/kernel...hecho.
+	Remote debugging using 127.0.0.1:26000
+	0x0000fff0 in ?? ()
+	(gdb) b *0x7000 thread 4
+	Punto de interrupción 1 at 0x7000
+	(gdb) continue
+	Continuando.
+
+	Thread 2 received signal SIGTRAP, Trace/breakpoint trap.
+	[Cambiando a Thread 2]
+	aviso: A handler for the OS ABI "GNU/Linux" is not built into this configuration of GDB.  Attempting to continue with the default i8086 settings.
+
+	Se asume que la arquitectura objetivo es i8086
+	[ 700:   0]    0x7000:	cli    
+	0x00000000 in ?? ()
+	(gdb) disable 1
+	(gdb) si 10
+	Se asume que la arquitectura objetivo es i386
+	=> 0x7020:	mov    $0x10,%ax
+	0x00007020 in ?? ()
+	(gdb) x/10i $eip
+	=> 0x7020:	mov    $0x10,%ax
+   	0x7024:	mov    %eax,%ds
+   	0x7026:	mov    %eax,%es
+   	0x7028:	mov    %eax,%ss
+   	0x702a:	mov    $0x0,%ax
+   	0x702e:	mov    %eax,%fs
+   	0x7030:	mov    %eax,%gs
+   	0x7032:	mov    $0x11f000,%eax
+   	0x7037:	mov    %eax,%cr3
+   	0x703a:	mov    %cr4,%eax
+	(gdb) p $eip
+	$1 = (void (*)()) 0x7020
+	(gdb) watch $eax == 0x11f000
+	Watchpoint 2: $eax == 0x11f000
+	(gdb) continue
+	Continuando.
+	=> 0x7037:	mov    %eax,%cr3
+
+	Thread 2 hit Watchpoint 2: $eax == 0x11f000
+
+	Old value = 0
+	New value = 1
+	0x00007037 in ?? ()
+	(gdb) p $eip
+	$2 = (void (*)()) 0x7037
+	(gdb) p mpentry_kstack
+	$3 = (void *) 0x0
+	(gdb) si
+	=> 0x703a:	mov    %cr4,%eax
+	0x0000703a in ?? ()
+	(gdb) p mpentry_kstack
+	$4 = (void *) 0x0
+	(gdb) si 7
+	=> 0x704e:	mov    0xf0235f04,%esp
+	0x0000704e in ?? ()
+	(gdb) p mpentry_kstack
+	$10 = (void *) 0xf0247000 <percpu_kstacks+65536>
+	```
+
+
+
 
 
 
