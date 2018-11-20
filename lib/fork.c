@@ -25,7 +25,8 @@ pgfault(struct UTrapframe *utf)
 	//   (see <inc/memlayout.h>).
 
 	// LAB 4: Your code here.
-	if (!(err & FEC_WR) || (err & FEC_PR) || !(uvpt[((int)addr)/PGSIZE] & PTE_COW))
+	if (!(err & FEC_WR) || (err & FEC_PR) ||
+	    !(uvpt[((int) addr) / PGSIZE] & PTE_COW))
 		panic("pgfault: failed!");
 
 	// Allocate a new page, map it at a temporary location (PFTEMP),
@@ -44,7 +45,7 @@ pgfault(struct UTrapframe *utf)
 	if ((r = sys_page_unmap(0, PFTEMP)) < 0)
 		panic("sys_page_unmap: %e", r);
 
-	//panic("pgfault not implemented");
+	// panic("pgfault not implemented");
 }
 
 //
@@ -64,24 +65,33 @@ duppage(envid_t envid, unsigned pn)
 	int r;
 
 	// LAB 4: Your code here.
-	
+
 	bool remap;
-	int perm = (PTE_P|PTE_W|PTE_U|PTE_PWT|PTE_PCD|PTE_A|PTE_PS|PTE_G);
+	int perm = (PTE_P | PTE_W | PTE_U | PTE_PWT | PTE_PCD | PTE_A | PTE_PS |
+	            PTE_G);
 	perm = uvpt[pn] & perm;
 	if (perm & PTE_W) {
-		perm = (perm & ~PTE_W)|PTE_COW;
+		perm = (perm & ~PTE_W) | PTE_COW;
 		remap = true;
 	}
 
-	if ((r = sys_page_map(sys_getenvid(), (void*) (pn*PGSIZE), envid, (void*) (pn*PGSIZE), perm)) < 0)
+	if ((r = sys_page_map(sys_getenvid(),
+	                      (void *) (pn * PGSIZE),
+	                      envid,
+	                      (void *) (pn * PGSIZE),
+	                      perm)) < 0)
 		panic("sys_page_map in duppage: %e", r);
 
 	if (remap) {
-		if ((r = sys_page_map(envid, (void*) (pn*PGSIZE), sys_getenvid(), (void*) (pn*PGSIZE), perm)) < 0)
+		if ((r = sys_page_map(envid,
+		                      (void *) (pn * PGSIZE),
+		                      sys_getenvid(),
+		                      (void *) (pn * PGSIZE),
+		                      perm)) < 0)
 			panic("sys_page_map in duppage: %e", r);
 	}
 
-	//panic("duppage not implemented");
+	// panic("duppage not implemented");
 	return 0;
 }
 
@@ -192,14 +202,15 @@ fork_v0(void)
 envid_t
 fork(void)
 {
-	return fork_v0(); //Dejo esto porque si no, rompe lo anterior. Cando este listo para probarse, se saca
+	return fork_v0();  // Dejo esto porque si no, rompe lo anterior. Cando
+	                   // este listo para probarse, se saca
 	// LAB 4: Your code here.
 
 	envid_t envid;
 	uint8_t *addr;
 	int r;
 
-	//set_pgfault_handler(void (*handler)(struct UTrapframe *utf));
+	// set_pgfault_handler(void (*handler)(struct UTrapframe *utf));
 
 	envid = sys_exofork();
 	if (envid < 0)
@@ -210,12 +221,15 @@ fork(void)
 		// is no longer valid (it refers to the parent!).
 		// Fix it and return 0.
 		thisenv = &envs[ENVX(sys_getenvid())];
-		//set_pgfault_handler(void (*handler)(struct UTrapframe *utf)); //claramente no con esa func
+		// set_pgfault_handler(void (*handler)(struct UTrapframe *utf));
+		// //claramente no con esa func
 		return 0;
 	}
 
 	for (addr = (uint8_t *) 0x0; addr < (uint8_t *) UTOP; addr += PGSIZE) {
-		if (((uint8_t *) (UXSTACKTOP - PGSIZE) < addr) && (addr < (uint8_t *) UXSTACKTOP)) continue;
+		if (((uint8_t *) (UXSTACKTOP - PGSIZE) < addr) &&
+		    (addr < (uint8_t *) UXSTACKTOP))
+			continue;
 		// more info:
 		// https://pdos.csail.mit.edu/6.828/2017/labs/lab4/uvpt.html
 		// uvpt = UVPT = EF400000
@@ -229,7 +243,8 @@ fork(void)
 		// So it leet us in the physical PD
 		// PDX(addr) * 4 in the offset to go to the pde of the pt of
 		// addr(* 4 because of the size of the pde's)
-		pde_t *pde = (pde_t *) (PGADDR(PDX(uvpd), PTX(uvpd), (PDX(addr) * 4)));
+		pde_t *pde =
+		        (pde_t *) (PGADDR(PDX(uvpd), PTX(uvpd), (PDX(addr) * 4)));
 		// if the pt of addr was present
 		if ((*pde) & PTE_P) {
 			// uvpt leet us enter to the page dir, because PDX(uvpt)
@@ -240,7 +255,8 @@ fork(void)
 			// PTX(addr) * 4 in the offset to go to the pte of
 			// addr(* 4 because of
 			// the size of the pte's)
-			pte_t *pte = (pte_t *) (PGADDR(PDX(uvpt), PDX(addr), (PTX(addr) * 4)));
+			pte_t *pte = (pte_t *) (PGADDR(
+			        PDX(uvpt), PDX(addr), (PTX(addr) * 4)));
 			// if the page of addr was present
 			if ((*pte) & PTE_P)
 				duppage(envid, (unsigned) addr);
