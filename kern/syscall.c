@@ -208,7 +208,8 @@ sys_page_alloc(envid_t envid, void *va, int perm)
 //
 // Return 0 on success, < 0 on error.  Errors are:
 //	-E_BAD_ENV if srcenvid and/or dstenvid doesn't currently exist,
-//		or the caller doesn't have permission to change one of them.
+//		or the caller doesn't have permission to change one of them
+//		(if checkperm was true).
 //	-E_INVAL if srcva >= UTOP or srcva is not page-aligned,
 //		or dstva >= UTOP or dstva is not page-aligned.
 //	-E_INVAL is srcva is not mapped in srcenvid's address space.
@@ -217,7 +218,12 @@ sys_page_alloc(envid_t envid, void *va, int perm)
 //		address space.
 //	-E_NO_MEM if there's no memory to allocate any necessary page tables.
 static int
-sys_page_map(envid_t srcenvid, void *srcva, envid_t dstenvid, void *dstva, int perm)
+sys_page_map(envid_t srcenvid,
+             void *srcva,
+             envid_t dstenvid,
+             void *dstva,
+             int perm,
+             bool checkperm)
 {
 	// Hint: This function is a wrapper around page_lookup() and
 	//   page_insert() from kern/pmap.c.
@@ -239,9 +245,10 @@ sys_page_map(envid_t srcenvid, void *srcva, envid_t dstenvid, void *dstva, int p
 	struct Env *srce;
 	struct Env *dste;
 
-	if ((r = envid2env(srcenvid, &srce, 1)) < 0)
+	if ((r = envid2env(srcenvid, &srce, checkperm)) < 0)
 		return r;
-	if ((r = envid2env(dstenvid, &dste, 1)) < 0)
+
+	if ((r = envid2env(dstenvid, &dste, checkperm)) < 0)
 		return r;
 
 	pte_t *pte;
@@ -249,8 +256,10 @@ sys_page_map(envid_t srcenvid, void *srcva, envid_t dstenvid, void *dstva, int p
 	if (!pp)
 		return -E_INVAL;
 
+
 	if (!(*pte & PTE_W) && (perm & PTE_W))
 		return -E_INVAL;
+
 
 	if ((r = page_insert(dste->env_pgdir, pp, dstva, perm | PTE_U | PTE_P)) <
 	    0) {
@@ -332,39 +341,24 @@ sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 	int r;
 	struct Env *e;
 
-	if ((r = envid2env(envid, &e, 0)) < 0)
+	if ((r = envid2env(envid, &e, 0)) < 0) {
 		return r;
+	}
 
 	if ((!e->env_ipc_recving)) /* || (another environment managed to send
 	                              first)*/
 		return -E_IPC_NOT_RECV;
 
+	// if the sender wants to sent a page
 	if (srcva < (void *) UTOP) {
 		// if the reveiver wants to receive a page
-		// If 'dstva' is < UTOP, then you are willing to receive a page
-		// of data.
-		if (e->env_ipc_dstva <
-		    (void *) UTOP) {  // creo que es redundante la comparacion
-			if (((uintptr_t) srcva % PGSIZE != 0) ||
-			    ((perm | PTE_SYSCALL) != PTE_SYSCALL))
-				return -E_INVAL;
-
-			pte_t *pte = (pte_t *) 0x1;
-			struct PageInfo *pp =
-			        page_lookup(e->env_pgdir, srcva, &pte);
-			if (!pp)
-				return -E_INVAL;
-
-			if (!(*pte & PTE_W) && (perm & PTE_W))
-				return -E_INVAL;
-
-			if ((r = page_insert(e->env_pgdir,
-			                     pp,
-			                     srcva,
-			                     perm | PTE_U | PTE_P)) < 0) {
-				page_free(pp);
+		if (e->env_ipc_dstva < (void *) UTOP) {
+			// sys_page_map dont have to check perms because
+			// envs allowed to share the page.
+			if ((r = sys_page_map(
+			             0, srcva, envid, e->env_ipc_dstva, perm, false)) <
+			    0)
 				return r;
-			}
 
 			e->env_ipc_perm = perm;
 		}
@@ -398,12 +392,18 @@ sys_ipc_recv(void *dstva)
 	if (dstva < (void *) UTOP) {
 		if ((uintptr_t) dstva % PGSIZE != 0)
 			return -E_INVAL;
-		curenv->env_ipc_dstva = dstva;
 	}
+	// if dstva > UTOP put it there too,
+	// so the sender know that this env is
+	// not waiting a page
+	curenv->env_ipc_dstva = dstva;
+
 	curenv->env_ipc_recving = true;
 	curenv->env_status = ENV_NOT_RUNNABLE;
+	// return 0 when the env return to running
+	curenv->env_tf.tf_regs.reg_eax = 0;
+	// no return
 	sched_yield();
-	return 0;
 }
 
 // Dispatches to the correct kernel function, passing the arguments.
@@ -429,11 +429,14 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 	case SYS_page_alloc:
 		return sys_page_alloc((envid_t) a1, (void *) a2, (int) a3);
 	case SYS_page_map:
+		// when calling map from a syscall
+		// it should check perms
 		return sys_page_map((envid_t) a1,
 		                    (void *) a2,
 		                    (envid_t) a3,
 		                    (void *) a4,
-		                    (int) a5);
+		                    (int) a5,
+		                    true);
 	case SYS_page_unmap:
 		return sys_page_unmap((envid_t) a1, (void *) a2);
 	case SYS_exofork:

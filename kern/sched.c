@@ -42,14 +42,15 @@ sched_yield(void)
 			i = 0;
 			continue;
 		}
-		if (envs[i].env_status == ENV_RUNNABLE) {
+		if (envs[i].env_status == ENV_RUNNABLE)
 			env_run(&envs[i]);
-		}
+
 		i++;
 	} while (i != inicial);
 	if (curenv) {
 		// no other env to run
-		env_run(curenv);
+		if (curenv->env_status == ENV_RUNNING)
+			env_run(curenv);
 	}
 	// sched_halt never returns
 	sched_halt();

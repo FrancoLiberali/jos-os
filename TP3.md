@@ -343,6 +343,34 @@ multicore_init
 	$10 = (void *) 0xf0247000 <percpu_kstacks+65536>
 	```
 
+ipc_recv
+-------
+Un proceso podría intentar enviar el valor númerico -E_INVAL vía ipc_send(). ¿Cómo es posible distinguir si es un error, o no?
+
+Caso A:
+
+```
+envid_t src = -1;
+int r = ipc_recv(&src, 0, NULL);
+
+if (r < 0)
+  if (!src)
+    puts("Hubo error.");
+  else
+    puts("Valor negativo correcto.")
+```
+
+Caso B:
+```
+int r = ipc_recv(NULL, 0, NULL);
+
+if (r < 0)
+  if (/* ??? */)
+    puts("Hubo error.");
+  else
+    puts("Valor negativo correcto.")
+```
+No es posible diferenciar el error en este caso.
 
 
 

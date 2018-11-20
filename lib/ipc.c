@@ -40,9 +40,13 @@ ipc_recv(envid_t *from_env_store, void *pg, int *perm_store)
 	if (perm_store) {
 		if (r == 0)
 			*perm_store = thisenv->env_ipc_perm;
-		else
+		else {
 			*perm_store = 0;
+		}
 	}
+
+	if (r)
+		return r;
 
 	return thisenv->env_ipc_value;
 }
@@ -60,13 +64,13 @@ ipc_send(envid_t to_env, uint32_t val, void *pg, int perm)
 {
 	// LAB 4: Your code here.
 	int sending;
+	void *pg_to_send;
+	if (pg)
+		pg_to_send = pg;
+	else
+		pg_to_send = (void *) 0xFFFFFFFF;
 	while (true) {
-		if (pg)
-			sending = sys_ipc_try_send(to_env, val, pg, perm);
-		else
-			sending = sys_ipc_try_send(
-			        to_env, val, (void *) 0xFFFFFFFF, perm);
-
+		sending = sys_ipc_try_send(to_env, val, pg_to_send, perm);
 		if (sending == 0)
 			break;
 		if (sending != -E_IPC_NOT_RECV)
