@@ -29,14 +29,13 @@ set_pgfault_handler(void (*handler)(struct UTrapframe *utf))
 	if (_pgfault_handler == 0) {
 		// First time through!
 		// LAB 4: Your code here.
-		//struct Env *e;
-		//if ((r = envid2env(sys_getenvid(), &e, 0)) < 0)
-		//	panic("set_pgfault_handler: envid2env failed!");
-		if ((r = sys_page_alloc(sys_getenvid(),(void*)(UXSTACKTOP-PGSIZE),0)) < 0)
+		if ((r = sys_page_alloc(0, (void*) (UXSTACKTOP - PGSIZE), PTE_W)) < 0)
 			panic("set_pgfault_handler: allocation failed!");
 		//e->env_pgfault_upcall = &(_pgfault_upcall); //no puedo usar ni curenv ni envid2env()
 	}
 
 	// Save handler pointer for assembly to call.
 	_pgfault_handler = handler;
+
+	sys_env_set_pgfault_upcall(0, &(_pgfault_upcall));
 }

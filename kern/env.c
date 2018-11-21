@@ -97,7 +97,6 @@ envid2env(envid_t envid, struct Env **env_store, bool checkperm)
 	// must be either the current environment
 	// or an immediate child of the current environment.
 	if (checkperm && e != curenv && e->env_parent_id != curenv->env_id) {
-		cprintf("no hay permisos");
 		*env_store = 0;
 		return -E_BAD_ENV;
 	}
