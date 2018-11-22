@@ -31,7 +31,6 @@ set_pgfault_handler(void (*handler)(struct UTrapframe *utf))
 		// LAB 4: Your code here.
 		if ((r = sys_page_alloc(0, (void*) (UXSTACKTOP - PGSIZE), PTE_W)) < 0)
 			panic("set_pgfault_handler: allocation failed!");
-		//e->env_pgfault_upcall = &(_pgfault_upcall); //no puedo usar ni curenv ni envid2env()
 	}
 
 	// Save handler pointer for assembly to call.

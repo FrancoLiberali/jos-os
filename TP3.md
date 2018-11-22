@@ -371,7 +371,34 @@ if (r < 0)
     puts("Valor negativo correcto.")
 ```
 No es posible diferenciar el error en este caso.
+    
 
+sys_ipc_try_send
+----------------
+
+1. ¿Cómo se podría hacer bloqueante esta llamada?
+
+	Una manera de hacerla bloqueante es con el uso de una Condition Variable que determine el estado del proceso B indicando si el mismo se encuentra o no recibiendo.
+
+2. Con esta nueva estrategia de implementación mejorada ¿podría ocurrir un deadlock? Poner un ejemplo de código de usuario que entre en deadlock.
+
+	El proceso A intenta enviar a B y se coloca en NOT_RUNNABLE porque se encuentra esperando que el proceso B se coloque en "recibiendo". A su vez, el proceso B hace lo mismo: intenta enviar a A y se coloca en NOT_RUNNABLE porque se encuentra esperando que el proceso A se coloque en "recibiendo".
+
+void umain(int argc, char **argv) {
+	envid_t a, b;
+
+	if ((a = fork()) != 0) {
+		while (!is_A_receiving) sys_yield();
+		ipc_send(a, 0, 0, 0);
+	}
+
+	if ((b = fork()) != 0) {
+		while (!is_B_receiving) sys_yield();
+		ipc_send(b, 0, 0, 0);
+	}
+}
+
+3. ¿Podría el kernel detectar el deadlock, e impedirlo devolviendo un nuevo error, E_DEADLOCK? ¿Qué función o funciones tendrían que modificarse para ello?
 
 
 
