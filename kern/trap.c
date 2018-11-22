@@ -376,14 +376,22 @@ page_fault_handler(struct Trapframe *tf)
 	//   (the 'tf' variable points at 'curenv->env_tf').
 
 	// LAB 4: Your code here.
-	if (curenv->env_pgfault_upcall) {
+	// if tf->tf_esp == USTACKTOP then the exception stack overflow
+	if (curenv->env_pgfault_upcall && tf->tf_esp != USTACKTOP) {
 		struct UTrapframe *u;
 
 		// llamadaS? a user_mem_assert?
 		user_mem_assert(curenv, (void *) UXSTACKTOP - PGSIZE, PGSIZE, PTE_W);
 
-		// Inicializar a la dirección correcta por abajo de UXSTACKTOP.
-		u = (struct UTrapframe *) (UXSTACKTOP - sizeof(struct UTrapframe));
+		// if actualy in the exception stack
+		if (tf->tf_esp < UXSTACKTOP && tf->tf_esp > USTACKTOP){
+			// tf->tf_esp is the top of the exception stack
+			// -4 for the scratch word;
+			u = (struct UTrapframe *) (tf->tf_esp - sizeof(struct UTrapframe) - 4);
+		} else {
+			// u in the top of UXSTACK.
+			u = (struct UTrapframe *) (UXSTACKTOP - sizeof(struct UTrapframe));
+		}
 
 		u->utf_fault_va = fault_va;
 		u->utf_err = tf->tf_err;
@@ -393,7 +401,7 @@ page_fault_handler(struct Trapframe *tf)
 		u->utf_esp = tf->tf_esp;
 
 		tf->tf_eip = (uintptr_t) curenv->env_pgfault_upcall;
-		tf->tf_esp = UXSTACKTOP - sizeof(struct UTrapframe);
+		tf->tf_esp = (uintptr_t) u;
 
 		env_run(curenv);
 	}
