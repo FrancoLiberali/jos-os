@@ -380,9 +380,10 @@ page_fault_handler(struct Trapframe *tf)
 		struct UTrapframe *u;
 
 		// llamadaS? a user_mem_assert?
-		user_mem_assert(curenv, (void *) UXSTACKTOP, PGSIZE, 0);
+		user_mem_assert(curenv, (void *) UXSTACKTOP, PGSIZE, PTE_W);
 
-		// u = ...; (?
+		// Inicializar a la dirección correcta por abajo de UXSTACKTOP.
+		u = (struct UTrapframe *) (UXSTACKTOP - sizeof(struct UTrapframe));
 
 		u->utf_fault_va = fault_va;
 		u->utf_err = tf->tf_err;
@@ -392,9 +393,9 @@ page_fault_handler(struct Trapframe *tf)
 		u->utf_esp = tf->tf_esp;
 
 		tf->tf_eip = (uintptr_t) curenv->env_pgfault_upcall;
-		// tf->ef_esp = ?;
+		tf->tf_esp = UXSTACKTOP - sizeof(struct UTrapframe);
 
-		// env_run(???);
+		env_run(curenv);
 	}
 
 	// Destroy the environment that caused the fault.
