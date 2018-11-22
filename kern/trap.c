@@ -381,15 +381,25 @@ page_fault_handler(struct Trapframe *tf)
 		struct UTrapframe *u;
 
 		// if actualy in the exception stack
-		if (tf->tf_esp < UXSTACKTOP && tf->tf_esp > USTACKTOP){
+		if (tf->tf_esp < UXSTACKTOP && tf->tf_esp > USTACKTOP) {
 			// tf->tf_esp is the top of the exception stack
 			// -4 for the scratch word;
-			user_mem_assert(curenv, (void *) tf->tf_esp - sizeof(struct UTrapframe) - 4, sizeof(struct UTrapframe), PTE_W);
-			u = (struct UTrapframe *) (tf->tf_esp - sizeof(struct UTrapframe) - 4);
+			user_mem_assert(curenv,
+			                (void *) tf->tf_esp -
+			                        sizeof(struct UTrapframe) - 4,
+			                sizeof(struct UTrapframe),
+			                PTE_W);
+			u = (struct UTrapframe *) (tf->tf_esp -
+			                           sizeof(struct UTrapframe) - 4);
 		} else {
 			// u in the top of UXSTACK.
-			user_mem_assert(curenv, (void *) UXSTACKTOP - sizeof(struct UTrapframe), sizeof(struct UTrapframe), PTE_W);
-			u = (struct UTrapframe *) (UXSTACKTOP - sizeof(struct UTrapframe));
+			user_mem_assert(curenv,
+			                (void *) UXSTACKTOP -
+			                        sizeof(struct UTrapframe),
+			                sizeof(struct UTrapframe),
+			                PTE_W);
+			u = (struct UTrapframe *) (UXSTACKTOP -
+			                           sizeof(struct UTrapframe));
 		}
 
 		u->utf_fault_va = fault_va;

@@ -104,7 +104,7 @@ pgfault(struct UTrapframe *utf)
 {
 	void *addr = (void *) utf->utf_fault_va;
 	addr = ROUNDDOWN(addr, PGSIZE);
-	
+
 	uint32_t err = utf->utf_err;
 	int r;
 
@@ -117,14 +117,13 @@ pgfault(struct UTrapframe *utf)
 	// LAB 4: Your code here.
 	pte_t *pte = 0;
 	pde_t *pde = (pde_t *) (PGADDR(
-		PDX(uvpd), PTX(uvpd), (PDX(addr) * sizeof(pde_t))));
+	        PDX(uvpd), PTX(uvpd), (PDX(addr) * sizeof(pde_t))));
 	// if the pt of addr was present
 	if ((*pde) & (PTE_P | PTE_COW))
-		pte = (pte_t *) (PGADDR(PDX(uvpt),
-			                    PDX(addr),
-			                    (PTX(addr) * sizeof(pte_t))));
-	
-	if (!(err & FEC_WR) || //(err & FEC_PR) ||
+		pte = (pte_t *) (PGADDR(
+		        PDX(uvpt), PDX(addr), (PTX(addr) * sizeof(pte_t))));
+
+	if (!(err & FEC_WR) ||  //(err & FEC_PR) ||
 	    !((*pte) & (PTE_P | PTE_COW)))
 		panic("pgfault: not copy-on-write region!");
 
@@ -137,11 +136,11 @@ pgfault(struct UTrapframe *utf)
 	// LAB 4: Your code here.
 	if ((r = sys_page_alloc(0, PFTEMP, PTE_W)) < 0)
 		panic("sys_page_alloc: %e", r);
-	
+
 	memmove(PFTEMP, addr, PGSIZE);
 	if ((r = sys_page_map(0, PFTEMP, 0, addr, PTE_W)) < 0)
 		panic("sys_page_map: %e", r);
-	
+
 	if ((r = sys_page_unmap(0, PFTEMP)) < 0)
 		panic("sys_page_unmap: %e", r);
 }
@@ -158,7 +157,7 @@ pgfault(struct UTrapframe *utf)
 // It is also OK to panic on error.
 //
 static int
-duppage(envid_t envid, void* addr, int perm)
+duppage(envid_t envid, void *addr, int perm)
 {
 	int r;
 
@@ -169,19 +168,11 @@ duppage(envid_t envid, void* addr, int perm)
 		remap = true;
 	}
 
-	if ((r = sys_page_map(0,
-	                      (void *) addr,
-	                      envid,
-	                      (void *) addr,
-	                      perm)) < 0)
+	if ((r = sys_page_map(0, (void *) addr, envid, (void *) addr, perm)) < 0)
 		panic("sys_page_map in duppage: %e", r);
-	
+
 	if (remap) {
-		if ((r = sys_page_map(0,
-		                      (void *) addr,
-		                      0,
-		                      (void *) addr,
-		                      perm)) < 0)
+		if ((r = sys_page_map(0, (void *) addr, 0, (void *) addr, perm)) < 0)
 			panic("sys_page_map in duppage: %e", r);
 	}
 
@@ -209,7 +200,7 @@ extern void _pgfault_upcall(void);
 envid_t
 fork(void)
 {
-	//return fork_v0(); inefficient way
+	// return fork_v0(); inefficient way
 	// LAB 4: Your code here.
 
 	envid_t envid;
@@ -234,11 +225,11 @@ fork(void)
 	// _pgfault_handler != 0 for the son
 	// but the UXSTACK will not be mapped for the father
 	// so we have to alloc a new one and set the pgfault_upcall
-	if ((r = sys_page_alloc(envid, (void*) (UXSTACKTOP - PGSIZE), PTE_W)) < 0)
+	if ((r = sys_page_alloc(envid, (void *) (UXSTACKTOP - PGSIZE), PTE_W)) < 0)
 		panic("set_pgfault_handler: allocation failed!");
-		
+
 	sys_env_set_pgfault_upcall(envid, &(_pgfault_upcall));
-	
+
 	for (addr = (uint8_t *) 0x0; addr < (uint8_t *) UTOP; addr += PGSIZE) {
 		if (((uint8_t *) USTACKTOP < addr) &&
 		    (addr < (uint8_t *) UXSTACKTOP))
@@ -271,10 +262,9 @@ fork(void)
 			                          PDX(addr),
 			                          (PTX(addr) * sizeof(pte_t))));
 			// if the page of addr was present
-			if ((*pte) & PTE_P){
-				duppage(envid, (void*) addr, (*pte) & PTE_SYSCALL);
+			if ((*pte) & PTE_P) {
+				duppage(envid, (void *) addr, (*pte) & PTE_SYSCALL);
 			}
-
 		}
 	}
 
