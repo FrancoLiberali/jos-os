@@ -7,95 +7,6 @@
 // It is one of the bits explicitly allocated to user processes (PTE_AVAIL).
 #define PTE_COW 0x800
 
-//
-// Custom page fault handler - if faulting page is copy-on-write,
-// map in our own private writable copy.
-//
-static void
-pgfault(struct UTrapframe *utf)
-{
-	void *addr = (void *) utf->utf_fault_va;
-	uint32_t err = utf->utf_err;
-	int r;
-
-	// Check that the faulting access was (1) a write, and (2) to a
-	// copy-on-write page.  If not, panic.
-	// Hint:
-	//   Use the read-only page table mappings at uvpt
-	//   (see <inc/memlayout.h>).
-
-	// LAB 4: Your code here.
-	if (!(err & FEC_WR) || (err & FEC_PR) ||
-	    !(uvpt[((int) addr) / PGSIZE] & PTE_COW))
-		panic("pgfault: failed!");
-
-	// Allocate a new page, map it at a temporary location (PFTEMP),
-	// copy the data from the old page to the new page, then move the new
-	// page to the old page's address.
-	// Hint:
-	//   You should make three system calls.
-
-	// LAB 4: Your code here.
-
-	if ((r = sys_page_alloc(sys_getenvid(), addr, 0)) < 0)
-		panic("sys_page_alloc: %e", r);
-	//creo que falta algun memcpy
-	if ((r = sys_page_map(sys_getenvid(), addr, 0, PFTEMP, 0)) < 0)
-		panic("sys_page_map: %e", r);
-	memmove(PFTEMP, addr, PGSIZE);
-	if ((r = sys_page_unmap(0, PFTEMP)) < 0)
-		panic("sys_page_unmap: %e", r);
-
-	// panic("pgfault not implemented");
-}
-
-//
-// Map our virtual page pn (address pn*PGSIZE) into the target envid
-// at the same virtual address.  If the page is writable or copy-on-write,
-// the new mapping must be created copy-on-write, and then our mapping must be
-// marked copy-on-write as well.  (Exercise: Why do we need to mark ours
-// copy-on-write again if it was already copy-on-write at the beginning of
-// this function?)
-//
-// Returns: 0 on success, < 0 on error.
-// It is also OK to panic on error.
-//
-static int
-duppage(envid_t envid, unsigned pn)
-{
-	int r;
-
-	// LAB 4: Your code here.
-
-	bool remap;
-	int perm = (PTE_P | PTE_W | PTE_U | PTE_PWT | PTE_PCD | PTE_A | PTE_PS |
-	            PTE_G);
-	perm = uvpt[pn] & perm;
-	if (perm & PTE_W) {
-		perm = (perm & ~PTE_W) | PTE_COW;
-		remap = true;
-	}
-
-	if ((r = sys_page_map(sys_getenvid(),
-	                      (void *) (pn * PGSIZE),
-	                      envid,
-	                      (void *) (pn * PGSIZE),
-	                      perm)) < 0)
-		panic("sys_page_map in duppage: %e", r);
-
-	if (remap) {
-		if ((r = sys_page_map(envid,
-		                      (void *) (pn * PGSIZE),
-		                      sys_getenvid(),
-		                      (void *) (pn * PGSIZE),
-		                      perm)) < 0)
-			panic("sys_page_map in duppage: %e", r);
-	}
-
-	// panic("duppage not implemented");
-	return 0;
-}
-
 static void
 dup_or_share(envid_t dstenv, void *va, int perm)
 {
@@ -185,6 +96,101 @@ fork_v0(void)
 }
 
 //
+// Custom page fault handler - if faulting page is copy-on-write,
+// map in our own private writable copy.
+//
+static void
+pgfault(struct UTrapframe *utf)
+{
+	void *addr = (void *) utf->utf_fault_va;
+	addr = ROUNDDOWN(addr, PGSIZE);
+	
+	uint32_t err = utf->utf_err;
+	int r;
+
+	// Check that the faulting access was (1) a write, and (2) to a
+	// copy-on-write page.  If not, panic.
+	// Hint:
+	//   Use the read-only page table mappings at uvpt
+	//   (see <inc/memlayout.h>).
+
+	// LAB 4: Your code here.
+	pte_t *pte = 0;
+	pde_t *pde = (pde_t *) (PGADDR(
+		PDX(uvpd), PTX(uvpd), (PDX(addr) * sizeof(pde_t))));
+	// if the pt of addr was present
+	if ((*pde) & (PTE_P | PTE_COW))
+		pte = (pte_t *) (PGADDR(PDX(uvpt),
+			                    PDX(addr),
+			                    (PTX(addr) * sizeof(pte_t))));
+	
+	if (!(err & FEC_WR) || //(err & FEC_PR) ||
+	    !((*pte) & (PTE_P | PTE_COW)))
+		panic("pgfault: not copy-on-write region!");
+
+	// Allocate a new page, map it at a temporary location (PFTEMP),
+	// copy the data from the old page to the new page, then move the new
+	// page to the old page's address.
+	// Hint:
+	//   You should make three system calls.
+
+	// LAB 4: Your code here.
+	if ((r = sys_page_alloc(0, PFTEMP, PTE_W)) < 0)
+		panic("sys_page_alloc: %e", r);
+	
+	memmove(PFTEMP, addr, PGSIZE);
+	if ((r = sys_page_map(0, PFTEMP, 0, addr, PTE_W)) < 0)
+		panic("sys_page_map: %e", r);
+	
+	if ((r = sys_page_unmap(0, PFTEMP)) < 0)
+		panic("sys_page_unmap: %e", r);
+}
+
+//
+// Map our virtual page pn (address pn*PGSIZE) into the target envid
+// at the same virtual address.  If the page is writable or copy-on-write,
+// the new mapping must be created copy-on-write, and then our mapping must be
+// marked copy-on-write as well.  (Exercise: Why do we need to mark ours
+// copy-on-write again if it was already copy-on-write at the beginning of
+// this function?)
+//
+// Returns: 0 on success, < 0 on error.
+// It is also OK to panic on error.
+//
+static int
+duppage(envid_t envid, void* addr, int perm)
+{
+	int r;
+
+	// LAB 4: Your code here.
+	bool remap;
+	if ((perm & PTE_W) | (perm & PTE_COW)) {
+		perm = (perm & ~PTE_W) | PTE_COW;
+		remap = true;
+	}
+
+	if ((r = sys_page_map(0,
+	                      (void *) addr,
+	                      envid,
+	                      (void *) addr,
+	                      perm)) < 0)
+		panic("sys_page_map in duppage: %e", r);
+	
+	if (remap) {
+		if ((r = sys_page_map(0,
+		                      (void *) addr,
+		                      0,
+		                      (void *) addr,
+		                      perm)) < 0)
+			panic("sys_page_map in duppage: %e", r);
+	}
+
+	return 0;
+}
+
+extern void _pgfault_upcall(void);
+
+//
 // User-level fork with copy-on-write.
 // Set up our page fault handler appropriately.
 // Create a child.
@@ -203,15 +209,14 @@ fork_v0(void)
 envid_t
 fork(void)
 {
-	return fork_v0();  // Dejo esto porque si no, rompe lo anterior. Cando
-	                   // este listo para probarse, se saca
+	//return fork_v0(); inefficient way
 	// LAB 4: Your code here.
 
 	envid_t envid;
 	uint8_t *addr;
 	int r;
 
-	set_pgfault_handler(NULL);
+	set_pgfault_handler(&pgfault);
 
 	envid = sys_exofork();
 	if (envid < 0)
@@ -222,45 +227,54 @@ fork(void)
 		// is no longer valid (it refers to the parent!).
 		// Fix it and return 0.
 		thisenv = &envs[ENVX(sys_getenvid())];
-		set_pgfault_handler(NULL);
-		// //claramente no con esa func
 		return 0;
 	}
 
+	// We're the parent.
+	// _pgfault_handler != 0 for the son
+	// but the UXSTACK will not be mapped for the father
+	// so we have to alloc a new one and set the pgfault_upcall
+	if ((r = sys_page_alloc(envid, (void*) (UXSTACKTOP - PGSIZE), PTE_W)) < 0)
+		panic("set_pgfault_handler: allocation failed!");
+		
+	sys_env_set_pgfault_upcall(envid, &(_pgfault_upcall));
+	
 	for (addr = (uint8_t *) 0x0; addr < (uint8_t *) UTOP; addr += PGSIZE) {
-		if (((uint8_t *) (UXSTACKTOP - PGSIZE) < addr) &&
+		if (((uint8_t *) USTACKTOP < addr) &&
 		    (addr < (uint8_t *) UXSTACKTOP))
 			continue;
 		// more info:
 		// https://pdos.csail.mit.edu/6.828/2017/labs/lab4/uvpt.html
 		// uvpt = UVPT = EF400000
 		// uvpd = (UVPT+(UVPT>>12)*4) = EF7BD000
-		// uvpd leet us enter to the page dir with two levels of
-		// inderection,
+		// uvpd let us enter to the page dir with two levels of
+		// indirection,
 		// because PDX(uvpt) is index of
 		// the recursively inserted PD in itself
 		// and PTX(uvpt) is index of
 		// the recursively inserted PD in itself too
-		// So it leet us in the physical PD
+		// So it let us in the physical PD
 		// PDX(addr) * 4 in the offset to go to the pde of the pt of
 		// addr(* 4 because of the size of the pde's)
-		pde_t *pde =
-		        (pde_t *) (PGADDR(PDX(uvpd), PTX(uvpd), (PDX(addr) * 4)));
+		pde_t *pde = (pde_t *) (PGADDR(
+		        PDX(uvpd), PTX(uvpd), (PDX(addr) * sizeof(pde_t))));
 		// if the pt of addr was present
 		if ((*pde) & PTE_P) {
-			// uvpt leet us enter to the page dir, because PDX(uvpt)
+			// uvpt let us enter to the page dir, because PDX(uvpt)
 			// is index of
 			// the recursively inserted PD in itself
 			// PDX(addr) as PTX to index in the PD with the PDX, so
-			// it leet us in the physical PT where addr is
-			// PTX(addr) * 4 in the offset to go to the pte of
-			// addr(* 4 because of
-			// the size of the pte's)
-			pte_t *pte = (pte_t *) (PGADDR(
-			        PDX(uvpt), PDX(addr), (PTX(addr) * 4)));
+			// it let us in the physical PT where addr is
+			// PTX(addr) * the size of the pte's)
+			pte_t *pte =
+			        (pte_t *) (PGADDR(PDX(uvpt),
+			                          PDX(addr),
+			                          (PTX(addr) * sizeof(pte_t))));
 			// if the page of addr was present
-			if ((*pte) & PTE_P)
-				duppage(envid, (unsigned) addr);
+			if ((*pte) & PTE_P){
+				duppage(envid, (void*) addr, (*pte) & PTE_SYSCALL);
+			}
+
 		}
 	}
 
