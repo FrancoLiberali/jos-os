@@ -676,7 +676,7 @@ user_mem_check(struct Env *env, const void *va, size_t len, int perm)
 {
 	// LAB 3: Your code here.
 	// +1 in case va + len is the begging of a page
-	const void *final_va = va + len + 1;
+	const void *final_va = va + len; //+ 1;
 	final_va = ROUNDUP(final_va, PGSIZE);
 	pte_t *p;
 	while (va != final_va) {

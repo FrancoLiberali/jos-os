@@ -380,7 +380,7 @@ page_fault_handler(struct Trapframe *tf)
 		struct UTrapframe *u;
 
 		// llamadaS? a user_mem_assert?
-		user_mem_assert(curenv, (void *) UXSTACKTOP, PGSIZE, PTE_W);
+		user_mem_assert(curenv, (void *) UXSTACKTOP - PGSIZE, PGSIZE, PTE_W);
 
 		// Inicializar a la dirección correcta por abajo de UXSTACKTOP.
 		u = (struct UTrapframe *) (UXSTACKTOP - sizeof(struct UTrapframe));
