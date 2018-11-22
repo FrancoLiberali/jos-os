@@ -39,6 +39,7 @@ pgfault(struct UTrapframe *utf)
 
 	if ((r = sys_page_alloc(sys_getenvid(), addr, 0)) < 0)
 		panic("sys_page_alloc: %e", r);
+	//creo que falta algun memcpy
 	if ((r = sys_page_map(sys_getenvid(), addr, 0, PFTEMP, 0)) < 0)
 		panic("sys_page_map: %e", r);
 	memmove(PFTEMP, addr, PGSIZE);
@@ -210,7 +211,7 @@ fork(void)
 	uint8_t *addr;
 	int r;
 
-	// set_pgfault_handler(void (*handler)(struct UTrapframe *utf));
+	set_pgfault_handler(NULL);
 
 	envid = sys_exofork();
 	if (envid < 0)
@@ -221,7 +222,7 @@ fork(void)
 		// is no longer valid (it refers to the parent!).
 		// Fix it and return 0.
 		thisenv = &envs[ENVX(sys_getenvid())];
-		// set_pgfault_handler(void (*handler)(struct UTrapframe *utf));
+		set_pgfault_handler(NULL);
 		// //claramente no con esa func
 		return 0;
 	}

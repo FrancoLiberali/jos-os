@@ -380,9 +380,6 @@ page_fault_handler(struct Trapframe *tf)
 	if (curenv->env_pgfault_upcall && tf->tf_esp != USTACKTOP) {
 		struct UTrapframe *u;
 
-		// llamadaS? a user_mem_assert?
-		//user_mem_assert(curenv, (void *) UXSTACKTOP - PGSIZE, PGSIZE, PTE_W);
-
 		// if actualy in the exception stack
 		if (tf->tf_esp < UXSTACKTOP && tf->tf_esp > USTACKTOP){
 			// tf->tf_esp is the top of the exception stack

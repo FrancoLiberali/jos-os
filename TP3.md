@@ -372,7 +372,6 @@ if (r < 0)
 ```
 No es posible diferenciar el error en este caso.
     
-
 sys_ipc_try_send
 ----------------
 
@@ -388,17 +387,26 @@ void umain(int argc, char **argv) {
 	envid_t a, b;
 
 	if ((a = fork()) != 0) {
-		while (!is_A_receiving) sys_yield();
+		while (!is_A_receiving) wait();	// wait pone al proceso como NOT_RUNNABLE y hace sched_yield()
 		ipc_send(a, 0, 0, 0);
 	}
 
 	if ((b = fork()) != 0) {
-		while (!is_B_receiving) sys_yield();
+		while (!is_B_receiving) wait();
 		ipc_send(b, 0, 0, 0);
 	}
 }
 
 3. ¿Podría el kernel detectar el deadlock, e impedirlo devolviendo un nuevo error, E_DEADLOCK? ¿Qué función o funciones tendrían que modificarse para ello?
+
+	Si el kernel detectara que todos los procesos hacen yield apenas se les otorga un time slice, podria asumir que ocurrio un deadlock. Se podria modificar, por ejemplo, sched_yield()
+
+fork
+----
+
+¿Puede hacerse con la función set_pgfault_handler()? De no poderse, ¿cómo llega al hijo el valor correcto de la variable global _pgfault_handler?
+
+
 
 
 
