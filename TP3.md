@@ -30,7 +30,7 @@ env_return
 Al terminar un proceso su función umain() ¿dónde retoma la ejecución el kernel? Describir la secuencia de llamadas desde que termina umain() hasta que el kernel dispone del proceso.
 
 Al terminar un proceso su función umain() la ejecución del kernel retoma en el "JOS kernel monitor!".
-Cuando termina umain() la ejecución del env retorna a libmain, la función que llama a los umain de los entornos de usuario. Luego de este llamado, libmain llama a exit(), la cual hace uso de syscall sys_env_destroy(). La misma realiza una syscall con el codigo SYS_env_destroy y el envid en 0 como parametro. Esta syscall sigué el camino usual de las syscall, es decir indexa en la IDT el codigo T_SYSCALL (ya que este es el codigo de la interrupción que generó la syscall), la cual lo lleva a la función syscall_trap, la que a su vez pushea el T_SYSCALL y salta a _alltraps. Allí, se termina de conformar la estructura trapframe y se la pasa por parametro a trap(). Esta a su vez llama a trap_dispatch() pasandole por parametro ese mismo trapframe, la cual chequeará que el trap number es T_SYSCALL y por lo tanto llamará al manejador de syscalls del kernel syscall(), pasandole por parametro el syscall number y envid en 0 que envió en env. Como el syscall number es SYS_env_destroy, se llama a sys_env_destroy con el envid en 0. Como el envid se encuentra en 0, el enviroment a destruir es el actual por lo que se hace print de que el env esta saliendo correctamente. A continuación, se llama a env_destroy y a su vez esta llama a env_free, la cual imprime que se esta liberando el environment y libera sus recursos. Luego env_destroy llama a sched_yield el cual actualmente solo llama a sched_halt, que busca entre los environments y como no encuentra ningun otro para ser corrido entonces imprime esa información y llama a monitor().
+Cuando termina umain() la ejecución del env retorna a libmain, la función que llama a los umain de los entornos de usuario. Luego de este llamado, libmain llama a exit(), la cual hace uso de syscall sys_env_destroy(). La misma realiza una syscall con el código SYS_env_destroy y el envid en 0 como parámetro. Esta syscall sigue el camino usual de las syscall, es decir indexa en la IDT el código T_SYSCALL (ya que este es el código de la interrupción que generó la syscall), la cual lo lleva a la función syscall_trap, la que a su vez pushea el T_SYSCALL y salta a _alltraps. Allí, se termina de conformar la estructura trapframe y se la pasa por parámetro a trap(). Esta a su vez llama a trap_dispatch() pasándole por parámetro ese mismo trapframe, la cual chequeará que el trap number es T_SYSCALL y por lo tanto llamará al manejador de syscalls del kernel syscall(), pasándole por parámetro el syscall number y envid en 0 que envió en env. Como el syscall number es SYS_env_destroy, se llama a sys_env_destroy con el envid en 0. Como el envid se encuentra en 0, el enviroment a destruir es el actual por lo que se hace print de que el env esta saliendo correctamente. A continuación, se llama a env_destroy y a su vez esta llama a env_free, la cual imprime que se esta liberando el environment y libera sus recursos. Luego env_destroy llama a sched_yield el cual actualmente solo llama a sched_halt, que busca entre los environments y como no encuentra ningún otro para ser corrido entonces imprime esa información y llama a monitor().
 
 Podemos ver lo explicado anteriormente en gdb:
 ```
@@ -59,7 +59,7 @@ Breakpoint 1, monitor (tf=0x0) at kern/monitor.c:113
 
 ¿en qué cambia la función env_destroy() en este TP, respecto al TP anterior?
 
-Cambia pricipalmente en dos cuentiones. La primera es que tiene en cuenta el caso en que se esta intentando destruit un environment que esta siendo ejecutado en otro CPU, al cual lo pone en modo zombie para que sea destruido por ese CPU. Por otro lado, antes llamaba directamente a monitor, mientras que ahora llama a sched_yield de manera que al destruir un env la idea es que se realice la planificación para que continue la ejecución de otro env, pero que actualmente por no estar implimentada resulta en monitor.
+Cambia principalmente en dos cuestiones. La primera es que tiene en cuenta el caso en que se esta intentando destruir un environment que esta siendo ejecutado en otro CPU, al cual lo pone en modo zombie para que sea destruido por ese CPU. Por otro lado, antes llamaba directamente a monitor, mientras que ahora llama a sched_yield de manera que al destruir un env la idea es que se realice la planificación para que continúe la ejecución de otro env, pero que actualmente, por no estar implementada, resulta en monitor.
 
 sys_yield
 ---------
@@ -120,7 +120,7 @@ Como vemos, al principio se crea el env 00001000, entra en el for y hace sys_yie
 envid2env
 ---------
 ¿Qué ocurre en JOS, si un proceso llama a sys_env_destroy(0)?
-Al usar el envid en 0 como parametro se procederá a destruir el proceso actual, es decir el mismo que realizó esta syscall. Esto se interpreta como que el proceso terminó correctamente su ejecución y desea simplemente terminar.
+Al usar el envid en 0 como parámetro se procederá a destruir el proceso actual, es decir el mismo que realizó esta syscall. Esto se interpreta como que el proceso terminó correctamente su ejecución y desea simplemente terminar.
 
 ¿Qué ocurre en Linux, si un proceso llama a kill(0, 9)?
 Ya que el pid es 0, se enviará la señal 9, es decir, la señal de kill, a todos los procesos que esten en el mismo grupo que el proceso que lo llama. Este grupo incluye al proceso actual y cualquier proceso que hizo fork desde o a el proceso actual ("padres e hijos").
@@ -129,19 +129,19 @@ Ya que el pid es 0, se enviará la señal 9, es decir, la señal de kill, a todo
 Al llamar a sys_env_destroy con este envid, se llamará a envid2env con el envid -1, resultando que chequeará si el ultimo env del arreglo de envs (envs[NENV-1]) tiene el envid -1, lo cual es imposible porque al allocar los envs nunca se genera un envid negativo, resultando en error.
 
 ¿Qué ocurre en Linux, si un proceso llama a kill(-1, 9)?
-Si el pid es -1, la señal es enviada a todos los procesos a los cuales el proceso acctual tiene permiso de enviar señales, excepto por el proceso 1-init. De este manera se matarian todos los procesos para los que se tiene permisos.
+Si el pid es -1, la señal es enviada a todos los procesos a los cuales el proceso actual tiene permiso de enviar señales, excepto por el proceso 1-init. De este manera se matarían todos los procesos para los que se tiene permisos.
 
 dumbfork
 --------
 
 1. Si, antes de llamar a dumbfork(), el proceso se reserva a sí mismo una página con sys_page_alloc() ¿se propagará una copia al proceso hijo? ¿Por qué?.
 
-	Realizar un llamado a sys_page_alloc previo a dumbfork no propagará una copia de la nueva pagina en el proceso hijo, ya que las paginas de memoria que se copian son las que estan entre UTEXT y end, de manera que se busca copiar solo el codigo del proceso. Luego tambien se copia la ultima página del stack, pero las paginas a copiar son fijas y no se copian demas páginas que no sean codigo o la ultima del stack.
+	Realizar un llamado a sys_page_alloc previo a dumbfork no propagará una copia de la nueva pagina en el proceso hijo, ya que las paginas de memoria que se copian son las que están entre UTEXT y end, de manera que se busca copiar solo el código del proceso. Luego también se copia la ultima página del stack, pero las paginas a copiar son fijas y no se copian demás páginas que no sean código o la ultima del stack.
 
 2. ¿Se preserva el estado de solo-lectura en las páginas copiadas? Mostrar, con código en espacio de usuario, cómo saber si una dirección de memoria es modificable por el proceso, o no. (Ayuda: usar las variables globales uvpd y/o uvpt.)
 
-	No se preserva el estado de solo-lectura de las páginas copiadas, ya que las paǵinas se allocan con sys_page_alloc(dstenv, addr, PTE_P|PTE_U|PTE_W) y como vemos se le ponen permisos de escritura a todas las páginas del nuevo proceso.
-    Para saber si una dirección de memoria addr es modificable por el proceso o no, podemos utilizar el siguiente codigo.
+	No se preserva el estado de solo-lectura de las páginas copiadas, ya que las páginas se allocan con sys_page_alloc(dstenv, addr, PTE_P|PTE_U|PTE_W) y como vemos se le ponen permisos de escritura a todas las páginas del nuevo proceso.
+    Para saber si una dirección de memoria addr es modificable por el proceso o no, podemos utilizar el siguiente código.
     ```
     pde_t *pde = (pde_t *) (PGADDR(
 		        PDX(uvpd), PTX(uvpd), (PDX(addr) * sizeof(pde_t))));
@@ -165,11 +165,11 @@ dumbfork
 	return false;
     ```
 3. Describir el funcionamiento de la función duppage().
-	La función dubppage, conta de tres pasos:
-    * Allocar una nueva página en el nuevo proceso comenzando en la misma dirección que la que se quiere copiar del proceso padre(addr) con sys_page_alloc(dstenv, addr, PTE_P|PTE_U|PTE_W), dandole permiso de usuario y escritura.
-    * Mapear la página virtual que comienza una dirección temporal (UTEMP) del espacio de direcciones del proceso padre a la misma página página fisica que la que tiene mapeada la página virtual que comienza en la dirección addr del proceso hijo, la cual fue allocada en esa página fisica en el proceso anterior. Esta acción se hace con sys_page_map(dstenv, addr, 0, UTEMP, PTE_P|PTE_U|PTE_W), y como vemos se mapea esta dirección temporal con permisos de escritura. 
-    * Copiar el contenido del largo de una página(PGSIZE) de la posición addr del proceso padre en la dirección temporal UTEMP de este mismo proceso y, ya que esta comparte la página fisica con la dirección addr del proceso hijo, al escribir en esta página virtual del proceso padre se escribe también la del hijo. Esto se hace con memmove(UTEMP, addr, PGSIZE);
-    * Desmapear la página virtual temporal del proceso padre, para que deje de apuntar a la misma página fisica que el proceso hijo. Esto se hace con sys_page_unmap(0, UTEMP).
+	La función dubppage, consta de tres pasos:
+    * Allocar una nueva página en el nuevo proceso comenzando en la misma dirección que la que se quiere copiar del proceso padre(addr) con sys_page_alloc(dstenv, addr, PTE_P|PTE_U|PTE_W), dándole permiso de usuario y escritura.
+    * Mapear la página virtual que comienza una dirección temporal (UTEMP) del espacio de direcciónes del proceso padre a la misma página página física que la que tiene mapeada la página virtual que comienza en la dirección addr del proceso hijo, la cual fue allocada en esa página física en el proceso anterior. Esta acción se hace con sys_page_map(dstenv, addr, 0, UTEMP, PTE_P|PTE_U|PTE_W), y como vemos se mapea esta dirección temporal con permisos de escritura. 
+    * Copiar el contenido del largo de una página(PGSIZE) de la posición addr del proceso padre en la dirección temporal UTEMP de este mismo proceso y, ya que esta comparte la página física con la dirección addr del proceso hijo, al escribir en esta página virtual del proceso padre se escribe también la del hijo. Esto se hace con memmove(UTEMP, addr, PGSIZE);
+    * Desmapear la página virtual temporal del proceso padre, para que deje de apuntar a la misma página física que el proceso hijo. Esto se hace con sys_page_unmap(0, UTEMP).
 
 4. Supongamos que se añade a duppage() un argumento booleano que indica si la página debe quedar como solo-lectura en el proceso hijo:
 
@@ -177,13 +177,13 @@ dumbfork
 	```
 	sys_page_map(dstenv, addr, dstenv, addr, PTE_P|PTE_U);
     ```
-    Para reinsertar la misma página fisica en la direccion addr con permisos distintos.
+    Para reinsertar la misma página física en la dirección addr con permisos distintos.
     
     * Describir un algoritmo alternativo que no aumente el número de llamadas al sistema, que debe quedar en 3 (1 × alloc, 1 × map, 1 × unmap).
-    La manera alternativa podria ser la propuesta por la catedra para fork_v0, en los casos que la página tenga permisos de escritura hacer este mismo proceso y si era de solo lectura simplemente mapear la dirección del nuevo proceso a la misma página fisica del proceso padre.
+    La manera alternativa podría ser la propuesta por la cátedra para fork_v0, en los casos que la página tenga permisos de escritura hacer este mismo proceso y si era de solo lectura simplemente mapear la dirección del nuevo proceso a la misma página física del proceso padre.
     
 5. ¿Por qué se usa ROUNDDOWN(&addr) para copiar el stack? ¿Qué es addr y por qué, si el stack crece hacia abajo, se usa ROUNDDOWN y no ROUNDUP?
-	Para copiar el stack nos basamos en &addr ya que addr es una variable local de la función dumfork que existe en el stack, y por lo tanto su posición de memoria corresponde a una del stack. El uso de ROUNDDOWN es porque la dirección de inicio de todas las páginas virtuales donde este contenida una dirección es el ROUNDOWN ya que la página empieza donde el offset es cero. Esto, es independiente a que esta dirección sea del stack, ROUNDUP de una dirección siempre nos da el inicio de la paǵina siguiente, y si estamos en el stack esto nos daría la paǵina anterior del stack. De esta manera, para que el stack crezca hacia abajo, las paǵinas del mismo se deben utilizar de arriba hacia abajo pero el inicio de la paǵina sigue siendo la dirección más baja de la misma. 
+	Para copiar el stack nos basamos en &addr ya que addr es una variable local de la función dumbfork que existe en el stack, y por lo tanto su posición de memoria corresponde a una del stack. El uso de ROUNDDOWN es porque la dirección de inicio de todas las páginas virtuales donde este contenida una dirección es el ROUNDOWN ya que la página empieza donde el offset es cero. Esto, es independiente a que esta dirección sea del stack, ROUNDUP de una dirección siempre nos da el inicio de la página siguiente, y si estamos en el stack esto nos daría la página anterior del stack. De esta manera, para que el stack crezca hacia abajo, las páginas del mismo se deben utilizar de arriba hacia abajo pero el inicio de la página sigue siendo la dirección más baja de la misma. 
     
     
 multicore_init
@@ -193,13 +193,13 @@ multicore_init
 	```
     memmove(code, mpentry_start, mpentry_end - mpentry_start);
     ```
-   Para empezar, code es KADDR(MPENTRY_PADDR), es decir, la dirección virtual por encima del KERNBASE que mapea con la dirección fisica MPENTRY_PADDR. Al ejecutar el memmove, lo que hacemos es copiar en la dirección virtual code, y por lo tanto en la dirección fisica MPENTRY_PADDR, el contenido de la dirección mpentry_start hasta el final ya que el largo es mpentry_end - mpentry_start. En la dirección mpentry_start se encuentran las instrucciones de mpentry.S, la ejecución que debe realizar un AP al cargarse. Por esta razón, la dirección virtual code es el punto de entrada de los los AP's y cuando se les indique cargarse se les enviará la dirección fisica que esta representa para que inicien allí.
+   Para empezar, code es KADDR(MPENTRY_PADDR), es decir, la dirección virtual por encima del KERNBASE que mapea con la dirección física MPENTRY_PADDR. Al ejecutar el memmove, lo que hacemos es copiar en la dirección virtual code, y por lo tanto en la dirección física MPENTRY_PADDR, el contenido de la dirección mpentry_start hasta el final ya que el largo es mpentry_end - mpentry_start. En la dirección mpentry_start se encuentran las instrucciones de mpentry.S, la ejecución que debe realizar un AP al cargarse. Por esta razón, la dirección virtual code es el punto de entrada de los los AP's y cuando se les indique cargarse se les enviará la dirección física que esta representa para que inicien allí.
 
 2. ¿Para qué se usa la variable global mpentry_kstack? ¿Qué ocurriría si el espacio para este stack se reservara en el archivo kern/mpentry.S, de manera similar a bootstack en el archivo kern/entry.S?
 
-	La variable global mpentry_kstack se usa para, a la hora de iniciar un AP, tener una referencia al stack que este CPU debe utilizar. Estos stacks se encuentran definidos por percpu_kstacks, y mpentry_kstack simplemente apunta al que le correponda al CPU que se esta inicializando según su ID.
+	La variable global mpentry_kstack se usa para, a la hora de iniciar un AP, tener una referencia al stack que este CPU debe utilizar. Estos stacks se encuentran definidos por percpu_kstacks, y mpentry_kstack simplemente apunta al que le corresponda al CPU que se esta inicializando según su ID.
 
-	Si este stack se reservara en el archivo kern/mpentry.S, dicho esta stack solo se reservaría una vez y todos los AP's intentarian utilizar ese mismo stack, ya este codigo de carga se copia una vez sola en la memoria real y todos los AP's lo ejecutarán desde allí (MPENTRY_PADDR). Por eso, los stacks para cada CPU son pre-alocados
+	Si este stack se reservara en el archivo kern/mpentry.S, dicho esta stack solo se reservaría una vez y todos los AP's intentarían utilizar ese mismo stack, ya este código de carga se copia una vez sola en la memoria real y todos los AP's lo ejecutarán desde allí (MPENTRY_PADDR). Por eso, los stacks para cada CPU son pre-alocados
     
 3. Cuando QEMU corre con múltiples CPUs, éstas se muestran en GDB como hilos de ejecución separados. Mostrar una sesión de GDB en la que se muestre cómo va cambiando el valor de la variable global mpentry_kstack.
 	```
@@ -275,9 +275,9 @@ multicore_init
 	```
     
 4. * ¿Qué valor tiene el registro %eip cuando se ejecuta esa línea?
-	El registro %eip tiene el valor 0x7032, ya que este codigo se esta ejecutando en la memoria cargada en MPENTRY_PADDR para el booteo de CPU's.
+	El registro %eip tiene el valor 0x7032, ya que este código se esta ejecutando en la memoria cargada en MPENTRY_PADDR para el booteo de CPU's.
    * ¿Se detiene en algún momento la ejecución si se pone un breakpoint en mpentry_start? ¿Por qué?
-    No, no se detiene la ejecución. Esto se debe a que cuando ponemos un breakpont directamente sobre mpentry_start lo haremos en la posición donde este codigo quedó compilado y linkeado, pero el que se va a ejecutar realmente es una copia de este mismo que se encuentra en MPENTRY_PADDR.
+    No, no se detiene la ejecución. Esto se debe a que cuando ponemos un breakpont directamente sobre mpentry_start lo haremos en la posición donde este código quedó compilado y linkeado, pero el que se va a ejecutar realmente es una copia de este mismo que se encuentra en MPENTRY_PADDR.
 
 5. Con GDB, mostrar el valor exacto de %eip y mpentry_kstack cuando se ejecuta la instrucción anterior en el último AP.
 	```
@@ -345,7 +345,7 @@ multicore_init
 
 ipc_recv
 -------
-Un proceso podría intentar enviar el valor númerico -E_INVAL vía ipc_send(). ¿Cómo es posible distinguir si es un error, o no?
+Un proceso podría intentar enviar el valor numérico -E_INVAL vía ipc_send(). ¿Cómo es posible distinguir si es un error, o no?
 
 Caso A:
 
@@ -377,11 +377,11 @@ sys_ipc_try_send
 
 1. ¿Cómo se podría hacer bloqueante esta llamada?
 
-	Una manera de hacerla bloqueante es con el uso de una Condition Variable que determine el estado del proceso B indicando si el mismo se encuentra o no recibiendo. Otra sería usar un mecanismo similar al utilizado actualmente con recv, al enviar poner el env como NOT_RUNNABLE y agregarlo a una lista de envs esperando enviar, y cuando un proceso haga recv deberia mirar en esa lista para ver si habia algun env esperando enviarle.
+	Una manera de hacerla bloqueante es con el uso de una Condition Variable que determine el estado del proceso B indicando si el mismo se encuentra o no recibiendo. Otra sería usar un mecanismo similar al utilizado actualmente con recv, al enviar poner el env como NOT_RUNNABLE y agregarlo a una lista de envs esperando enviar, y cuando un proceso haga recv debería mirar en esa lista para ver si había algún env esperando enviarle.
 
 fork
 ----
 
 ¿Puede hacerse con la función set_pgfault_handler()? De no poderse, ¿cómo llega al hijo el valor correcto de la variable global _pgfault_handler?
 
-No, no puede hacerse con la función set_pgfault_handler(), este seteo se realiza desde el env padre y dicha funcion no nos permite seleccionar a que env le queremos setear, lo hace automaticamente para el env llamante. Para que se setee correctamente el pgfault_handler, es necesario reservar a mano la memoria destinada para el exception stack para el hijo y luego utilizar la syscall sys_env_set_pgfault_upcall(envid_t,void*) con &(_pgfault_upcall) como parametro para que le llegue el valor correcto al campo env_pgfault_upcall. &(_pgfault_upcall) tiene una referencia a la variable global _pgfault_handler, la cual deberia ser un puntero a la función pgfault que nunca estamos seteando para el hijo. Esto se debe a que esta variable global tendrá el valor correcto cuando deba ser utilizada, porque al ser una variable global esta guardada en la memoria del padre, y la misma será copiada para el hijo, aparecendo la informacion nacesaria.
+No, no puede hacerse con la función set_pgfault_handler(), este seteo se realiza desde el env padre y dicha función no nos permite seleccionar a que env le queremos setear, lo hace automáticamente para el env llamante. Para que se setee correctamente el pgfault_handler, es necesario reservar a mano la memoria destinada para el exception stack para el hijo y luego utilizar la syscall sys_env_set_pgfault_upcall(envid_t,void*) con &(_pgfault_upcall) como parámetro para que le llegue el valor correcto al campo env_pgfault_upcall. &(_pgfault_upcall) tiene una referencia a la variable global _pgfault_handler, la cual deberia ser un puntero a la función pgfault que nunca estamos seteando para el hijo. Esto se debe a que esta variable global tendrá el valor correcto cuando deba ser utilizada, porque al ser una variable global esta guardada en la memoria del padre, y la misma será copiada para el hijo, apareciendo la información necesaria.
