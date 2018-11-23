@@ -377,11 +377,11 @@ sys_ipc_try_send
 
 1. ¿Cómo se podría hacer bloqueante esta llamada?
 
-	Una manera de hacerla bloqueante es con el uso de una Condition Variable que determine el estado del proceso B indicando si el mismo se encuentra o no recibiendo.
+	Una manera de hacerla bloqueante es con el uso de una Condition Variable que determine el estado del proceso B indicando si el mismo se encuentra o no recibiendo. Otra sería usar un mecanismo similar al utilizado actualmente con recv, al enviar poner el env como NOT_RUNNABLE y agregarlo a una lista de envs esperando enviar, y cuando un proceso haga recv deberia mirar en esa lista para ver si habia algun env esperando enviarle.
 
 fork
 ----
 
 ¿Puede hacerse con la función set_pgfault_handler()? De no poderse, ¿cómo llega al hijo el valor correcto de la variable global _pgfault_handler?
 
-	Para que se setee correctamente el pgfault_handler, es necesario reservar a mano la memoria destinada para el exception stack y luego utilizar la syscall sys_env_set_pgfault_upcall(envid_t,void*) con &(_pgfault_handler) como parametro para que le llegue el valor correcto al campo env_pgfault_upcall.
+No, no puede hacerse con la función set_pgfault_handler(), este seteo se realiza desde el env padre y dicha funcion no nos permite seleccionar a que env le queremos setear, lo hace automaticamente para el env llamante. Para que se setee correctamente el pgfault_handler, es necesario reservar a mano la memoria destinada para el exception stack para el hijo y luego utilizar la syscall sys_env_set_pgfault_upcall(envid_t,void*) con &(_pgfault_upcall) como parametro para que le llegue el valor correcto al campo env_pgfault_upcall. &(_pgfault_upcall) tiene una referencia a la variable global _pgfault_handler, la cual deberia ser un puntero a la función pgfault que nunca estamos seteando para el hijo. Esto se debe a que esta variable global tendrá el valor correcto cuando deba ser utilizada, porque al ser una variable global esta guardada en la memoria del padre, y la misma será copiada para el hijo, aparecendo la informacion nacesaria.

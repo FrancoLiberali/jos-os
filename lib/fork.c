@@ -146,7 +146,7 @@ pgfault(struct UTrapframe *utf)
 }
 
 //
-// Map our virtual page pn (address pn*PGSIZE) into the target envid
+// Map our virtual address addr (page-aligned) into the target envid
 // at the same virtual address.  If the page is writable or copy-on-write,
 // the new mapping must be created copy-on-write, and then our mapping must be
 // marked copy-on-write as well.  (Exercise: Why do we need to mark ours
@@ -222,12 +222,12 @@ fork(void)
 	}
 
 	// We're the parent.
-	// _pgfault_handler != 0 for the son
-	// but the UXSTACK will not be mapped for the father
-	// so we have to alloc a new one and set the pgfault_upcall
+	// set_pgfault_handler(&pgfault); dont let us choise
+	// for what env we want to set the handler, so we do it
+	// manually.
 	if ((r = sys_page_alloc(envid, (void *) (UXSTACKTOP - PGSIZE), PTE_W)) < 0)
 		panic("set_pgfault_handler: allocation failed!");
-
+	
 	sys_env_set_pgfault_upcall(envid, &(_pgfault_upcall));
 
 	for (addr = (uint8_t *) 0x0; addr < (uint8_t *) UTOP; addr += PGSIZE) {
