@@ -384,8 +384,4 @@ fork
 
 ¿Puede hacerse con la función set_pgfault_handler()? De no poderse, ¿cómo llega al hijo el valor correcto de la variable global _pgfault_handler?
 
-
-
-
-
-
+	Para que se setee correctamente el pgfault_handler, es necesario reservar a mano la memoria destinada para el exception stack y luego utilizar la syscall sys_env_set_pgfault_upcall(envid_t,void*) con &(_pgfault_handler) como parametro para que le llegue el valor correcto al campo env_pgfault_upcall.
