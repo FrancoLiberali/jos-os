@@ -328,18 +328,19 @@ copy_shared_pages(envid_t child)
 		pde_t *pde = (pde_t *) (PGADDR(
 		        PDX(uvpd), PTX(uvpd), (PDX(addr) * sizeof(pde_t))));
 		// if the pt of addr was present
-		if ((*pde) & PTE_P) {
+		if ((*pde) & (PTE_P | PTE_SHARE)) {
 			pte_t *pte =
 			        (pte_t *) (PGADDR(PDX(uvpt),
 			                          PDX(addr),
 			                          (PTX(addr) * sizeof(pte_t))));
-			// if the page of addr was present
-			if ((*pte) & (PTE_P | PTE_SHARE)) {
+			// if the page of addr was present and share
+			if (((*pte) & PTE_P) && ((*pte) & PTE_SHARE)) {
 				int r = sys_page_map(0,
 				                     (void *) addr,
 				                     child,
 				                     (void *) addr,
 				                     (*pte) & PTE_SYSCALL);
+				
 				if (r)
 					return r;
 			}

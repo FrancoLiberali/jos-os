@@ -125,7 +125,7 @@ pgfault(struct UTrapframe *utf)
 
 	if (!(err & FEC_WR) ||  //(err & FEC_PR) ||
 	    !((*pte) & (PTE_P | PTE_COW)))
-		panic("pgfault: not copy-on-write region!");
+		panic("pgfault: not copy-on-write region at addr: %p!", addr);
 
 	// Allocate a new page, map it at a temporary location (PFTEMP),
 	// copy the data from the old page to the new page, then move the new
@@ -162,7 +162,7 @@ duppage(envid_t envid, void *addr, int perm)
 	int r;
 
 	// LAB 4: Your code here.
-	bool remap;
+	bool remap = false;
 	if (((perm & PTE_W) || (perm & PTE_COW)) && !(perm & PTE_SHARE)) {
 		perm = (perm & ~PTE_W) | PTE_COW;
 		remap = true;
