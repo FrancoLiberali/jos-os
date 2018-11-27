@@ -163,7 +163,7 @@ duppage(envid_t envid, void *addr, int perm)
 
 	// LAB 4: Your code here.
 	bool remap;
-	if ((perm & PTE_W) | (perm & PTE_COW)) {
+	if (((perm & PTE_W) || (perm & PTE_COW)) && !(perm & PTE_SHARE)) {
 		perm = (perm & ~PTE_W) | PTE_COW;
 		remap = true;
 	}

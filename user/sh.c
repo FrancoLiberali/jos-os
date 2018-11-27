@@ -55,7 +55,7 @@ again:
 			// then close the original 'fd'.
 
 			// LAB 5: Your code here.
-			if ((fd = open(t,O_RDONLY)) != 0){
+			if ((fd = open(t, O_RDONLY)) != 0) {
 				dup(fd, 0);
 				close(fd);
 			}
