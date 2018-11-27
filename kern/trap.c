@@ -87,6 +87,8 @@ void simd_floating_point_exception();
 void syscall_trap();
 
 void irq_timer();
+void irq_kbd();
+void irq_serial();
 
 void
 trap_init(void)
@@ -118,6 +120,8 @@ trap_init(void)
 	SETGATE(idt[T_SYSCALL], 0, GD_KT, (&syscall_trap), 3)
 
 	SETGATE(idt[IRQ_OFFSET + IRQ_TIMER], 0, GD_KT, (&irq_timer), 3)
+	SETGATE(idt[IRQ_OFFSET + IRQ_KBD], 0, GD_KT, (&irq_kbd), 3)
+	SETGATE(idt[IRQ_OFFSET + IRQ_SERIAL], 0, GD_KT, (&irq_serial), 3)
 
 	// Per-CPU setup
 	trap_init_percpu();
@@ -263,10 +267,12 @@ trap_dispatch(struct Trapframe *tf)
 	// LAB 5: Your code here.
 	if (tf->tf_trapno == IRQ_OFFSET + IRQ_KBD) {
 		kbd_intr();
+		return;
 	}
 
 	if (tf->tf_trapno == IRQ_OFFSET + IRQ_SERIAL) {
 		serial_intr();
+		return;
 	}
 
 	// Unexpected trap: The user process or the kernel has a bug.
