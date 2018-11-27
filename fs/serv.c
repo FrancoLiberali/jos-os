@@ -292,14 +292,14 @@ serve_sync(envid_t envid, union Fsipc *req)
 typedef int (*fshandler)(envid_t envid, union Fsipc *req);
 
 fshandler handlers[] = {
-	// Open is handled specially because it passes pages
-	/* [FSREQ_OPEN] =	(fshandler)serve_open, */
-	[FSREQ_READ] = serve_read,
-	[FSREQ_STAT] = serve_stat,
-	[FSREQ_FLUSH] = (fshandler) serve_flush,
-	[FSREQ_WRITE] = (fshandler) serve_write,
-	[FSREQ_SET_SIZE] = (fshandler) serve_set_size,
-	[FSREQ_SYNC] = serve_sync
+	        // Open is handled specially because it passes pages
+	        /* [FSREQ_OPEN] =	(fshandler)serve_open, */
+	        [FSREQ_READ] = serve_read,
+	        [FSREQ_STAT] = serve_stat,
+	        [FSREQ_FLUSH] = (fshandler) serve_flush,
+	        [FSREQ_WRITE] = (fshandler) serve_write,
+	        [FSREQ_SET_SIZE] = (fshandler) serve_set_size,
+	        [FSREQ_SYNC] = serve_sync
 };
 
 void

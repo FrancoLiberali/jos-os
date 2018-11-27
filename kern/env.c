@@ -399,7 +399,7 @@ env_create(uint8_t *binary, enum EnvType type)
 {
 	// LAB 3: Your code here.
 	struct Env *e;
-	
+
 	int err = env_alloc(&e, 0);
 	if (err < 0)
 		panic("env_create: %e", err);
@@ -411,7 +411,6 @@ env_create(uint8_t *binary, enum EnvType type)
 	// LAB 5: Your code here.
 	if (type == ENV_TYPE_FS)
 		e->env_tf.tf_eflags |= FL_IOPL_3;
-	
 }
 
 //

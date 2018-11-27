@@ -227,7 +227,7 @@ fork(void)
 	// manually.
 	if ((r = sys_page_alloc(envid, (void *) (UXSTACKTOP - PGSIZE), PTE_W)) < 0)
 		panic("set_pgfault_handler: allocation failed!");
-	
+
 	sys_env_set_pgfault_upcall(envid, &(_pgfault_upcall));
 
 	for (addr = (uint8_t *) 0x0; addr < (uint8_t *) UTOP; addr += PGSIZE) {

@@ -37,13 +37,13 @@ static ssize_t devfile_write(struct Fd *fd, const void *buf, size_t n);
 static int devfile_stat(struct Fd *fd, struct Stat *stat);
 static int devfile_trunc(struct Fd *fd, off_t newsize);
 
-struct Dev devfile = { .dev_id = 'f',
-	               .dev_name = "file",
-	               .dev_read = devfile_read,
-	               .dev_close = devfile_flush,
-	               .dev_stat = devfile_stat,
-	               .dev_write = devfile_write,
-	               .dev_trunc = devfile_trunc };
+struct Dev devfile = {.dev_id = 'f',
+	              .dev_name = "file",
+	              .dev_read = devfile_read,
+	              .dev_close = devfile_flush,
+	              .dev_stat = devfile_stat,
+	              .dev_write = devfile_write,
+	              .dev_trunc = devfile_trunc };
 
 // Open a file (or directory).
 //
