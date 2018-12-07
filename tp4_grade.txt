@@ -1,0 +1,24 @@
+internal FS tests [fs/test.c]: OK (1.6s) 
+  fs i/o: OK 
+  check_bc: OK 
+  check_super: OK 
+  check_bitmap: OK 
+  alloc_block: OK 
+  file_open: OK 
+  file_get_block: OK 
+  file_flush/file_truncate/file rewrite: OK 
+testfile: OK (1.4s) 
+  serve_open/file_stat/file_close: OK 
+  file_read: OK 
+  file_write: OK 
+  file_read after file_write: OK 
+  open: OK 
+  large file: OK 
+spawn via spawnhello: OK (1.6s) 
+Protection I/O space: OK (1.2s) 
+PTE_SHARE [testpteshare]: OK (1.6s) 
+PTE_SHARE [testfdsharing]: OK (2.2s) 
+start the shell [icode]: Timeout! OK (31.9s) 
+testshell: OK (2.6s) 
+primespipe: OK (12.6s) 
+Score: 150/150
