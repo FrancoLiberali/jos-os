@@ -264,7 +264,9 @@ trap_dispatch(struct Trapframe *tf)
 		// Be careful! In multiprocessors, clock interrupts are
 		// triggered on every CPU.
 		// LAB 6: Your code here.
-		time_tick();
+		if (cpunum() == 0){
+			time_tick();
+		}
 		lapic_eoi();
 		sched_yield();
 	}
