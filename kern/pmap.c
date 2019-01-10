@@ -9,6 +9,7 @@
 #include <kern/pmap.h>
 #include <kern/kclock.h>
 #include <kern/env.h>
+#include <kern/e1000.h>
 #include <kern/cpu.h>
 
 // These variables are set by i386_detect_memory()
@@ -173,6 +174,17 @@ mem_init(void)
 	// LAB 3: Your code here.
 	envs = (struct Env *) boot_alloc(NENV * sizeof(struct Env));
 	memset(envs, 0, NENV * sizeof(struct Env));
+
+	//////////////////////////////////////////////////////////////////////
+	// (LAB 6)
+	// Make 'tx_desc_array' point to an array of size 'NDESC' of 'struct tx_desc'.
+	// boot_alloc return page aligned memory so tx_desc_array is aligned 
+	// on a paragraph (16-byte) boundary.
+	tx_desc_array = (struct tx_desc *) boot_alloc(NDESC * sizeof(struct tx_desc));
+	memset(tx_desc_array, 0, NDESC * sizeof(struct tx_desc));
+	// Make 'buffers' point to an array of size 'NDESC' of 'BUFFER_LEN' bytes.
+	buffers = (void*) boot_alloc(NDESC * BUFFER_LEN);
+	memset(buffers, 0, NDESC * BUFFER_LEN);
 
 	//////////////////////////////////////////////////////////////////////
 	// Now that we've allocated the initial kernel data structures, we set
