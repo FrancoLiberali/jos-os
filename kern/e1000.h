@@ -52,8 +52,10 @@ extern struct tx_desc* tx_desc_array;
 extern packet_t* buffers;
 
 #define TDESC_STATUS_DD 1 /* DD field in the status word (TDESC.STATUS)*/
-#define TDESC_CMD_RS_SET 0x4 /* value in RS field in the command word (TDESC.CMD) to advise
+#define TDESC_CMD_RS_SET 0x8 /* value in the command word (TDESC.CMD) to set RS bit to advise
 the Ethernet controller needs to report the status information */
+#define TDESC_CMD_EOP_SET 0x1 /* value in the command word (TDESC.CMD) to set EOP bit to 
+indicates the last descriptor making up the packet. */
 
 struct tx_desc
 {
@@ -77,7 +79,7 @@ typedef struct tx_desc_array{
 int e1000_attachfn (struct pci_func *pcif);
 void e1000_regs_init();
 void tx_desc_array_init();
-int transmit(char* packet, uint32_t len);
-int tx_desc_array_add(char* packet, uint32_t len);
+int transmit(void* packet, uint32_t len);
+int tx_desc_array_add(void* packet, uint32_t len);
 
 #endif  // JOS_KERN_E1000_H

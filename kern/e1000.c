@@ -54,15 +54,12 @@ void e1000_regs_init(){
 }
 
 /* Initialize each descriptor of the descriptor array
-matching each descriptor to its respective buffer in the buffers array,
-setting the RS field in the command word (TDESC.CMD) to advise
-the Ethernet controller needs to report the status information
+matching each descriptor to its respective buffer in the buffers array
 and setting the DD field in the status word (TDESC.STATUS) to show TDESC is free 
 */
 void tx_desc_array_init() {
     for (int i = 0; i < NDESC; i++){
         tx_desc_array[i].addr = (uint32_t) PADDR(buffers + i);
-		tx_desc_array[i].cmd = TDESC_CMD_RS_SET;
 		/* initialy free */
 		tx_desc_array[i].status = TDESC_STATUS_DD;
 	}
@@ -74,7 +71,8 @@ Returns:
     E_QUEUE_FULL if the transmit queue is full
     0 otherwise 
 */
-int transmit(char* packet, uint32_t len){
+//FALTA CHEQUE DE LEN QUE NO ENTRA EN PACKET
+int transmit(void* packet, uint32_t len){
     int new_actual = tx_desc_array_add(packet, len);
     if (new_actual == E_QUEUE_FULL){
         return E_QUEUE_FULL;
@@ -90,7 +88,7 @@ Returns:
     E_QUEUE_FULL if the transmit queue is full
     The new tail of the transmit queue that should be set to the TBT   
 */
-int tx_desc_array_add(char* packet, uint32_t len){
+int tx_desc_array_add(void* packet, uint32_t len){
     if (actual == NDESC){
         actual = 0;
     }
@@ -99,6 +97,9 @@ int tx_desc_array_add(char* packet, uint32_t len){
         /* no more free */
         tx_desc_array[actual].status = tx_desc_array[actual].status & ~(TDESC_STATUS_DD);
         tx_desc_array[actual].length = len;
+        /* set the RS field in the command word (TDESC.CMD) to advise
+        the Ethernet controller needs to report the status information */
+        tx_desc_array[actual].cmd = TDESC_CMD_RS_SET | TDESC_CMD_EOP_SET;
         /* write the packet content in the buffer */
         memmove(KADDR(tx_desc_array[actual].addr), packet, len);
         actual++;
