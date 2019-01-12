@@ -12,7 +12,7 @@ int e1000_attachfn (struct pci_func *pcif){
     e1000 = mmio_map_region(pcif->reg_base[0], pcif->reg_size[0]);
     cprintf("E1000 Service status register %0x\n", *((uint32_t*)(e1000 + E1000_STATUS)));
 
-    *((uint32_t*)(e1000 + E1000_TDBAL)) = (uint32_t) tx_desc_array;
+    *((uint32_t*)(e1000 + E1000_TDBAL)) = (uint32_t) PADDR(tx_desc_array);
     *((uint32_t*)(e1000 + E1000_TDBAH)) = 0;
     *((uint32_t*)(e1000 + E1000_TDLEN)) = NDESC * sizeof(struct tx_desc);
     *((uint32_t*)(e1000 + E1000_TDBAH)) = 0;
