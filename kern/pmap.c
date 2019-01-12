@@ -182,9 +182,9 @@ mem_init(void)
 	// on a paragraph (16-byte) boundary.
 	tx_desc_array = (struct tx_desc *) boot_alloc(NDESC * sizeof(struct tx_desc));
 	memset(tx_desc_array, 0, NDESC * sizeof(struct tx_desc));
-	// Make 'buffers' point to an array of size 'NDESC' of 'BUFFER_LEN' bytes.
-	buffers = (void*) boot_alloc(NDESC * BUFFER_LEN);
-	memset(buffers, 0, NDESC * BUFFER_LEN);
+	// Make 'buffers' point to an array of size 'NDESC' of 'packet_t'.
+	buffers = (packet_t*) boot_alloc(NDESC * sizeof(packet_t));
+	memset(buffers, 0, NDESC * sizeof(packet_t));
 
 	//////////////////////////////////////////////////////////////////////
 	// Now that we've allocated the initial kernel data structures, we set

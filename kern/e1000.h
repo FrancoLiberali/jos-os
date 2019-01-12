@@ -2,6 +2,7 @@
 #define JOS_KERN_E1000_H
 
 #include <kern/pci.h>
+//#include <kern/tx_desc_array.h>
 
 #define E1000_VENDOR_ID 0x8086
 #define E1000_DEVICE_ID 0x100E
@@ -43,14 +44,16 @@ shown. */
 #define E1000_TIPG_IPGR2_IEEE802p3  6    /* expected value for TIPG.IPGR2 in IEEE 802.3*/
 
 
-
-
 #define NDESC 64 /* Descriptors in the transmit descriptor array */ 
-#define BUFFER_LEN 1518  /* Maximum size of an Ethernet packet */
-
+#define PACKET_LEN 1518  /* Maximum size of an Ethernet packet in bytes */
+typedef struct packet { char buffer[PACKET_LEN]; } packet_t;
 
 extern struct tx_desc* tx_desc_array;
-extern void* buffers;
+extern packet_t* buffers;
+
+#define TDESC_STATUS_DD 1 /* DD field in the status word (TDESC.STATUS)*/
+#define TDESC_CMD_RS_SET 0x4 /* value in RS field in the command word (TDESC.CMD) to advise
+the Ethernet controller needs to report the status information */
 
 struct tx_desc
 {
@@ -63,6 +66,18 @@ struct tx_desc
 	uint16_t special;
 };
 
+typedef struct tx_desc_array{
+    uint32_t len;
+	uint32_t actual;
+    struct tx_desc* data;
+} tx_desc_array_t;
+
+#define E_QUEUE_FULL -1
+
 int e1000_attachfn (struct pci_func *pcif);
+void e1000_regs_init();
+void tx_desc_array_init();
+int transmit(char* packet, uint32_t len);
+int tx_desc_array_add(char* packet, uint32_t len);
 
 #endif  // JOS_KERN_E1000_H
