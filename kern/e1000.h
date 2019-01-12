@@ -26,17 +26,23 @@
 #define E1000_TDT      0x03818  /* TX Descripotr Tail - RW */
 
 #define E1000_TCTL     0x00400  /* TX Control - RW */
-#define E1000_TCTL_RST    0x00000001    /* software reset */
 #define E1000_TCTL_EN     0x00000002    /* enable tx */
-#define E1000_TCTL_BCE    0x00000004    /* busy check enable */
 #define E1000_TCTL_PSP    0x00000008    /* pad short packets */
-#define E1000_TCTL_CT     0x00000ff0    /* collision threshold */
 #define E1000_TCTL_COLD   0x003ff000    /* collision distance */
-#define E1000_TCTL_SWXOFF 0x00400000    /* SW Xoff transmission */
-#define E1000_TCTL_PBE    0x00800000    /* Packet Burst Enable */
-#define E1000_TCTL_RTLC   0x01000000    /* Re-transmit on late collision */
-#define E1000_TCTL_NRTU   0x02000000    /* No Re-transmit on underrun */
-#define E1000_TCTL_MULR   0x10000000    /* Multiple request support */
+#define E1000_TCTL_COLD_DUPLEX   0x40   /* collision distance value for full duplex*/
+#define E1000_TCTL_COLD_BIT 12          /* initial bit of the TCTL.COLD */
+
+#define E1000_TIPG     0x00410  /* TX Inter-packet gap -RW */
+#define E1000_TIPG_IPGT_BIT         0    /* initial bit of the TIPG.IPGT */
+#define E1000_TIPG_IPGT_IEEE802p3   10   /* expected value for TIPG.IPGT in IEEE 802.3*/
+/* IPGR1 and IPGR2 are not needed in full duplex, but are easier to always program to the values 
+shown. */
+#define E1000_TIPG_IPGR1_BIT        10   /* initial bit of the TIPG.IPGR1 */
+#define E1000_TIPG_IPGR1_IEEE802p3  (2 * E1000_TIPG_IPGR2_IEEE802p3 / 3)   /* expected value for TIPG.IPGR1 in IEEE 802.3*/
+#define E1000_TIPG_IPGR2_BIT        20   /* initial bit of the TIPG.IPGR2 */
+#define E1000_TIPG_IPGR2_IEEE802p3  6    /* expected value for TIPG.IPGR2 in IEEE 802.3*/
+
+
 
 
 #define NDESC 64 /* Descriptors in the transmit descriptor array */ 
