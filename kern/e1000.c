@@ -1,13 +1,13 @@
 #include <kern/e1000.h>
 #include <kern/pmap.h>
-#include <kern/tx_desc_array.h>
 #include <inc/string.h>
+#include <inc/error.h>
 
 // LAB 6: Your driver code here
 
 volatile void *e1000;
 struct tx_desc* tx_desc_array;
-uint32_t actual;
+uint32_t actual_idx;
 packet_t* buffers;
 
 int e1000_attachfn (struct pci_func *pcif){
@@ -28,6 +28,11 @@ int e1000_attachfn (struct pci_func *pcif){
     transmit(packet4, sizeof(packet4));
     char packet5[] = "PRUEBA 5 MAS LARGA";
     transmit(packet5, sizeof(packet5));
+    char packet6[2000] = "PRUEBA 6 PAQUETE QUE NO ENTRA";
+    transmit(packet6, sizeof(packet6));
+    for (int i = 0; i < 64; i++){
+        transmit(packet5, sizeof(packet5));
+    }
 
     return 0;
 }
@@ -71,15 +76,13 @@ Returns:
     E_QUEUE_FULL if the transmit queue is full
     0 otherwise 
 */
-//FALTA CHEQUE DE LEN QUE NO ENTRA EN PACKET
 int transmit(void* packet, uint32_t len){
-    int new_actual = tx_desc_array_add(packet, len);
-    if (new_actual == E_QUEUE_FULL){
-        return E_QUEUE_FULL;
+    int new_actual_idx = tx_desc_array_add(packet, len);
+    if (new_actual_idx == -E_QUEUE_FULL){
+        return -E_QUEUE_FULL;
     }
-    *((uint32_t*)(e1000 + E1000_TDT)) = new_actual;
+    *((uint32_t*)(e1000 + E1000_TDT)) = new_actual_idx;
     return 0;
-
 }
 
 /* Tries to add a packet to the de tx_desc_array by checking that the 
@@ -89,21 +92,33 @@ Returns:
     The new tail of the transmit queue that should be set to the TBT   
 */
 int tx_desc_array_add(void* packet, uint32_t len){
-    if (actual == NDESC){
-        actual = 0;
-    }
-    /* if the next one is free */
-    if ((tx_desc_array[actual].status & TDESC_STATUS_DD) == TDESC_STATUS_DD){
+    int transmited_len, this_len;
+    int new_actual_idx = actual_idx;
+    for (transmited_len = 0; transmited_len < len; transmited_len += PACKET_LEN){
+        /* if the next one not is free */
+        if ((tx_desc_array[new_actual_idx].status & TDESC_STATUS_DD) != TDESC_STATUS_DD){
+            return -E_QUEUE_FULL;
+        }
         /* no more free */
-        tx_desc_array[actual].status = tx_desc_array[actual].status & ~(TDESC_STATUS_DD);
-        tx_desc_array[actual].length = len;
-        /* set the RS field in the command word (TDESC.CMD) to advise
-        the Ethernet controller needs to report the status information */
-        tx_desc_array[actual].cmd = TDESC_CMD_RS_SET | TDESC_CMD_EOP_SET;
-        /* write the packet content in the buffer */
-        memmove(KADDR(tx_desc_array[actual].addr), packet, len);
-        actual++;
-        return actual;
+        tx_desc_array[new_actual_idx].status = 0;//tx_desc_array[new_actual_idx].status & ~(TDESC_STATUS_DD);
+        if (len - transmited_len > PACKET_LEN){
+            this_len = PACKET_LEN;
+            /* set the RS field in the command word (TDESC.CMD) to advise
+            the Ethernet controller needs to report the status information */
+            tx_desc_array[new_actual_idx].cmd = TDESC_CMD_RS_SET;
+        } else {
+            this_len = len - transmited_len;
+            /* set the RS field and the EOP because it is the last part of the packet */
+            tx_desc_array[new_actual_idx].cmd = TDESC_CMD_RS_SET | TDESC_CMD_EOP_SET;
+        }
+        tx_desc_array[new_actual_idx].length = this_len;
+        memmove(KADDR(tx_desc_array[new_actual_idx].addr), packet + transmited_len, this_len);
+        new_actual_idx++;
+        /* if reach the the end of the circular array */
+        if (new_actual_idx == NDESC){
+            new_actual_idx = 0;
+        }
     }
-    return E_QUEUE_FULL;
+    actual_idx = new_actual_idx;
+    return actual_idx;
 }

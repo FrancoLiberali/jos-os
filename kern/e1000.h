@@ -74,8 +74,6 @@ typedef struct tx_desc_array{
     struct tx_desc* data;
 } tx_desc_array_t;
 
-#define E_QUEUE_FULL -1
-
 int e1000_attachfn (struct pci_func *pcif);
 void e1000_regs_init();
 void tx_desc_array_init();
