@@ -18,7 +18,7 @@ int e1000_attachfn (struct pci_func *pcif){
     e1000_regs_init();
 
 	tx_desc_array_init();
-    char packet1[] = "PRUEBA 1";
+    /*char packet1[] = "PRUEBA 1";
     transmit(packet1, sizeof(packet1));
     char packet2[] = "PRUEBA 2";
     transmit(packet2, sizeof(packet2));
@@ -32,7 +32,7 @@ int e1000_attachfn (struct pci_func *pcif){
     transmit(packet6, sizeof(packet6));
     for (int i = 0; i < 64; i++){
         transmit(packet5, sizeof(packet5));
-    }
+    }*/
 
     return 0;
 }
@@ -73,10 +73,10 @@ void tx_desc_array_init() {
 /* Tries to transmit a packet by adding it to the tx_desc_array
 and updating TDT 
 Returns:
-    E_QUEUE_FULL if the transmit queue is full
+    -E_QUEUE_FULL if the transmit queue is full
     0 otherwise 
 */
-int transmit(void* packet, uint32_t len){
+int e1000_try_transmit(void* packet, uint32_t len){
     int new_actual_idx = tx_desc_array_add(packet, len);
     if (new_actual_idx == -E_QUEUE_FULL){
         return -E_QUEUE_FULL;
@@ -88,7 +88,7 @@ int transmit(void* packet, uint32_t len){
 /* Tries to add a packet to the de tx_desc_array by checking that the 
 next descriptor is free, copying the packet data into the next descriptor
 Returns:
-    E_QUEUE_FULL if the transmit queue is full
+    -E_QUEUE_FULL if the transmit queue is full
     The new tail of the transmit queue that should be set to the TBT   
 */
 int tx_desc_array_add(void* packet, uint32_t len){

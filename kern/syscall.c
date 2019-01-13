@@ -452,7 +452,7 @@ sys_e1000_try_transmit(void* packet, uint32_t len)
 	// Check that the user has permission to read memory [packet, packet+len).
 	// Destroy the environment if not.
 	user_mem_assert(curenv, packet, len, (PTE_P | PTE_U));
-	return transmit(packet, len);
+	return e1000_try_transmit(packet, len);
 }
 
 // Dispatches to the correct kernel function, passing the arguments.

@@ -77,7 +77,7 @@ typedef struct tx_desc_array{
 int e1000_attachfn (struct pci_func *pcif);
 void e1000_regs_init();
 void tx_desc_array_init();
-int transmit(void* packet, uint32_t len);
+int e1000_try_transmit(void* packet, uint32_t len);
 int tx_desc_array_add(void* packet, uint32_t len);
 
 #endif  // JOS_KERN_E1000_H
