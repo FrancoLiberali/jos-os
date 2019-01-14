@@ -177,14 +177,23 @@ mem_init(void)
 
 	//////////////////////////////////////////////////////////////////////
 	// (LAB 6)
-	// Make 'tx_desc_array' point to an array of size 'NDESC' of 'struct tx_desc'.
+	// Make 'tx_desc_array' point to an array of size 'TX_NDESC' of 'struct tx_desc'.
 	// boot_alloc return page aligned memory so tx_desc_array is aligned 
 	// on a paragraph (16-byte) boundary.
-	tx_desc_array = (struct tx_desc *) boot_alloc(NDESC * sizeof(struct tx_desc));
-	memset(tx_desc_array, 0, NDESC * sizeof(struct tx_desc));
-	// Make 'buffers' point to an array of size 'NDESC' of 'packet_t'.
-	buffers = (packet_t*) boot_alloc(NDESC * sizeof(packet_t));
-	memset(buffers, 0, NDESC * sizeof(packet_t));
+	tx_desc_array = (struct tx_desc *) boot_alloc(TX_NDESC * sizeof(struct tx_desc));
+	memset(tx_desc_array, 0, TX_NDESC * sizeof(struct tx_desc));
+	// Make 'tx_buffers' point to an array of size 'TX_NDESC' of 'tx_packet_t'.
+	tx_buffers = (tx_packet_t*) boot_alloc(TX_NDESC * sizeof(tx_packet_t));
+	memset(tx_buffers, 0, TX_NDESC * sizeof(tx_packet_t));
+
+	// Make 'rx_desc_array' point to an array of size 'RX_NDESC' of 'struct rx_desc'.
+	// boot_alloc return page aligned memory so rx_desc_array is aligned 
+	// on a paragraph (16-byte) boundary.
+	rx_desc_array = (struct rx_desc *) boot_alloc(RX_NDESC * sizeof(struct rx_desc));
+	memset(rx_desc_array, 0, RX_NDESC * sizeof(struct rx_desc));
+	// Make 'rx_buffers' point to an array of size 'RX_NDESC' of 'rx_packet_t'.
+	rx_buffers = (rx_packet_t*) boot_alloc(RX_NDESC * sizeof(rx_packet_t));
+	memset(rx_buffers, 0, RX_NDESC * sizeof(rx_packet_t));
 
 	//////////////////////////////////////////////////////////////////////
 	// Now that we've allocated the initial kernel data structures, we set
