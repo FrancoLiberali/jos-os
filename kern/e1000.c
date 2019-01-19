@@ -172,7 +172,6 @@ Returns:
     packet len > 0 otherwise 
 */
 int e1000_try_receive(void* u_buffer){
-    //cprintf("ADENTRO DE RECIBIR\n");
     uint32_t rx_tail = *((uint32_t*)(e1000 + E1000_RDT));
     rx_tail++;
     if (rx_tail == RX_NDESC){

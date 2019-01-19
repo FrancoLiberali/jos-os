@@ -7,6 +7,10 @@
 #include <inc/mmu.h>
 #include <lwip/sockets.h>
 
+// amount of physical pages to use ad buffer 
+// to receive packets and IPC to the network server
+#define NIPCINBUF   3
+
 struct jif_pkt {
 	int jp_len;
 	char jp_data[0];

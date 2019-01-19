@@ -467,7 +467,7 @@ sys_e1000_try_receive(void* u_buffer)
 	// Check that the user has permission to read and write 
 	// [u_buffer, u_buffer+RX_PACKET_LEN).
 	// Destroy the environment if not.
-	//user_mem_assert(curenv, u_buffer, RX_PACKET_LEN, (PTE_P | PTE_U | PTE_W));
+	user_mem_assert(curenv, u_buffer, RX_PACKET_LEN, (PTE_P | PTE_U | PTE_W));
 	return e1000_try_receive(u_buffer);
 }
 
