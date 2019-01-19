@@ -455,6 +455,22 @@ sys_e1000_try_transmit(void* packet, uint32_t len)
 	return e1000_try_transmit(packet, len);
 }
 
+// Tries to receive a packet by copying it out in u_buffer
+// and updating RDT 
+// Returns:
+//    -E_TRY_AGAIN if the receive queue is empty
+//    packet len > 0 otherwise 
+// Destroys the environment on memory errors.
+static int
+sys_e1000_try_receive(void* u_buffer)
+{
+	// Check that the user has permission to read and write 
+	// [u_buffer, u_buffer+RX_PACKET_LEN).
+	// Destroy the environment if not.
+	//user_mem_assert(curenv, u_buffer, RX_PACKET_LEN, (PTE_P | PTE_U | PTE_W));
+	return e1000_try_receive(u_buffer);
+}
+
 // Dispatches to the correct kernel function, passing the arguments.
 int32_t
 syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5)
@@ -506,6 +522,8 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 		return sys_time_msec();
 	case SYS_e1000_try_transmit:
 		return sys_e1000_try_transmit((void*) a1, (uint32_t) a2);
+	case SYS_e1000_try_receive:
+		return sys_e1000_try_receive((void*) a1);
 	default:
 		return -E_INVAL;
 	}

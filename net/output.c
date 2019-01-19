@@ -1,6 +1,5 @@
 #include "ns.h"
-#include <lib/ipc.c>
-#include <lib/syscall.c>
+#include <inc/lib.h>
 
 extern union Nsipc nsipcbuf;
 
@@ -26,15 +25,6 @@ output(envid_t ns_envid)
 				if (error){
 					sys_yield();
 				}
-				/*
-				Be aware of the interaction between the device driver, 
-				the output environment and the core network server when 
-				there is no more space in the device driver's transmit queue. 
-				The core network server sends packets to the output environment 
-				using IPC. If the output environment is suspended due to 
-				a send packet system call because the driver has no more 
-				buffer space for new packets, the core network server 
-				will block waiting for the output server to accept the IPC call. */
 			}
 		}
 	}

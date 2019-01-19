@@ -4,7 +4,6 @@
 #include <inc/error.h>
 
 // LAB 6: Your driver code here
-
 volatile void *e1000;
 struct tx_desc* tx_desc_array;
 struct rx_desc* rx_desc_array;
@@ -12,6 +11,79 @@ tx_packet_t* tx_buffers;
 rx_packet_t* rx_buffers;
 uint32_t actual_idx;
 
+static void setreg(uint32_t offset, uint32_t value)
+{
+  *((uint32_t*)(e1000 + offset)) = value;
+}
+
+/* Initialize each descriptor of the transmit descriptor array
+matching each descriptor to its respective buffer in the tx_buffers array
+and setting the DD field in the status word (TDESC.STATUS) to show TDESC is free 
+*/
+static void tx_desc_array_init() {
+    for (int i = 0; i < TX_NDESC; i++){
+        tx_desc_array[i].addr = (uint32_t) PADDR(tx_buffers + i);
+		/* initialy free */
+		tx_desc_array[i].status = TDESC_STATUS_DD;
+	}
+}
+
+/* Perform the initialization steps described in section 
+14.5 of Intel's Software Developer's Manual for the E1000 */
+static void e1000_tx_regs_init(){
+    setreg(E1000_TDBAL, (uint32_t) PADDR(tx_desc_array));
+    setreg(E1000_TDBAH, 0);
+    setreg(E1000_TDLEN, TX_NDESC * sizeof(struct tx_desc));
+    setreg(E1000_TDH, 0);
+    setreg(E1000_TDT, 0);
+
+    setreg(E1000_TCTL, E1000_TCTL_EN | E1000_TCTL_PSP | 
+                       E1000_TCTL_COLD_DUPLEX << E1000_TCTL_COLD_BIT);
+
+    setreg(E1000_TIPG, E1000_TIPG_IPGT_IEEE802p3 << E1000_TIPG_IPGT_BIT |
+                       E1000_TIPG_IPGR1_IEEE802p3 << E1000_TIPG_IPGR1_BIT | 
+                       E1000_TIPG_IPGR2_IEEE802p3 << E1000_TIPG_IPGR2_BIT);
+
+	tx_desc_array_init();
+}
+
+/* Initialize each descriptor of the receive descriptor array
+matching each descriptor to its respective buffer in the rx_buffers array
+*/
+static void rx_desc_array_init() {
+    for (int i = 0; i < RX_NDESC; i++){
+        rx_desc_array[i].addr = (uint32_t) PADDR(rx_buffers + i);
+	}
+}
+
+/* Perform the initialization steps described in section 
+14.4 of Intel's Software Developer's Manual for the E1000 */
+static void e1000_rx_regs_init(void){
+    setreg(E1000_RAL, QEMU_DEFAULT_MAC_L);
+    setreg(E1000_RAH, QEMU_DEFAULT_MAC_H | E1000_RAH_AV);
+    
+    for (int i = 1; i < 16; i++){
+        setreg(E1000_RAL + 8 * i, 0);
+        setreg(E1000_RAH + 8 * i, 0);
+    }
+    
+    memset((void*)(e1000 + E1000_MTA), 0, E1000_MTA_LEN);
+
+    setreg(E1000_IMS, E1000_IMS_DISABLE);
+
+    setreg(E1000_RDBAL, (uint32_t) PADDR(rx_desc_array));
+    setreg(E1000_RDBAH, 0);
+    setreg(E1000_RDLEN, RX_NDESC * sizeof(struct rx_desc));
+
+    rx_desc_array_init();
+
+    setreg(E1000_RDH, 0);
+    setreg(E1000_RDT, RX_NDESC - 1);
+
+    setreg(E1000_RCTL, E1000_RCTL_EN | E1000_RCTL_LBM_NO | //E1000_RCTL_LPE |
+                       E1000_RCTL_BAM | E1000_RCTL_SZ_2048 |  
+                       E1000_RCTL_SECRC);
+}
 
 int e1000_attachfn (struct pci_func *pcif){
     pci_func_enable(pcif);
@@ -19,8 +91,6 @@ int e1000_attachfn (struct pci_func *pcif){
     cprintf("E1000 Service status register %0x\n", *((uint32_t*)(e1000 + E1000_STATUS)));
 
     e1000_tx_regs_init();
-	tx_desc_array_init();
-    
     e1000_rx_regs_init();
     
     /*char packet1[] = "PRUEBA 1";
@@ -42,99 +112,13 @@ int e1000_attachfn (struct pci_func *pcif){
     return 0;
 }
 
-/* Perform the initialization steps described in section 
-14.5 of Intel's Software Developer's Manual for the E1000 */
-void e1000_tx_regs_init(){
-    *((uint32_t*)(e1000 + E1000_TDBAL)) = (uint32_t) PADDR(tx_desc_array);
-    *((uint32_t*)(e1000 + E1000_TDBAH)) = 0;
-    *((uint32_t*)(e1000 + E1000_TDLEN)) = TX_NDESC * sizeof(struct tx_desc);
-    *((uint32_t*)(e1000 + E1000_TDBAH)) = 0;
-    *((uint32_t*)(e1000 + E1000_TDH)) = 0;
-    *((uint32_t*)(e1000 + E1000_TDT)) = 0;
-
-    *((uint32_t*)(e1000 + E1000_TCTL)) = *((uint32_t*)(e1000 + E1000_TCTL)) |
-                                        E1000_TCTL_EN | 
-                                        E1000_TCTL_PSP | 
-                                        E1000_TCTL_COLD_DUPLEX << E1000_TCTL_COLD_BIT;
-
-    *((uint32_t*)(e1000 + E1000_TIPG)) = *((uint32_t*)(e1000 + E1000_TIPG)) | 
-                                        E1000_TIPG_IPGT_IEEE802p3 << E1000_TIPG_IPGT_BIT |
-                                        E1000_TIPG_IPGR1_IEEE802p3 << E1000_TIPG_IPGR1_BIT | 
-                                        E1000_TIPG_IPGR2_IEEE802p3 << E1000_TIPG_IPGR2_BIT;
-    
-}
-
-/* Perform the initialization steps described in section 
-14.4 of Intel's Software Developer's Manual for the E1000 */
-void e1000_rx_regs_init(void){
-    *((uint32_t*)(e1000 + E1000_RAL)) = (uint32_t) QEMU_DEFAULT_MAC_L;
-    *((uint32_t*)(e1000 + E1000_RAH)) = (uint32_t) (QEMU_DEFAULT_MAC_H | E1000_RAH_AV);
-    for (int i = 1; i < 8; i++){
-        *((uint32_t*)(e1000 + E1000_RAL + 8 * i)) = 0;
-        *((uint32_t*)(e1000 + E1000_RAH + 8 * i)) = 0;
-    }
-    
-    memset((void*)(e1000 + E1000_MTA), 0, E1000_MTA_LEN);
-
-    *((uint32_t*)(e1000 + E1000_IMS)) = (uint32_t) E1000_IMS_DISABLE;
-
-    *((uint32_t*)(e1000 + E1000_RDBAL)) = (uint32_t) PADDR(rx_desc_array);
-    *((uint32_t*)(e1000 + E1000_RDBAH)) = 0;
-    *((uint32_t*)(e1000 + E1000_RDLEN)) = RX_NDESC * sizeof(struct rx_desc);
-
-    rx_desc_array_init();
-
-    *((uint32_t*)(e1000 + E1000_RDH)) = 0;
-    *((uint32_t*)(e1000 + E1000_RDT)) = RX_NDESC - 1;
-
-    *((uint32_t*)(e1000 + E1000_RCTL)) = (E1000_RCTL_EN | E1000_RCTL_LBM_NO | 
-                                        E1000_RCTL_BAM | E1000_RCTL_SZ_2048 |  
-                                        E1000_RCTL_SECRC);
-}
-
-/* Initialize each descriptor of the transmit descriptor array
-matching each descriptor to its respective buffer in the tx_buffers array
-and setting the DD field in the status word (TDESC.STATUS) to show TDESC is free 
-*/
-void tx_desc_array_init() {
-    for (int i = 0; i < TX_NDESC; i++){
-        tx_desc_array[i].addr = (uint32_t) PADDR(tx_buffers + i);
-		/* initialy free */
-		tx_desc_array[i].status = TDESC_STATUS_DD;
-	}
-}
-
-/* Initialize each descriptor of the receive descriptor array
-matching each descriptor to its respective buffer in the rx_buffers array
-*/
-void rx_desc_array_init() {
-    for (int i = 0; i < RX_NDESC; i++){
-        rx_desc_array[i].addr = (uint32_t) PADDR(rx_buffers + i);
-	}
-}
-
-/* Tries to transmit a packet by adding it to the tx_desc_array
-and updating TDT 
-Returns:
-    -E_QUEUE_FULL if the transmit queue is full
-    0 otherwise 
-*/
-int e1000_try_transmit(void* packet, uint32_t len){
-    int new_actual_idx = tx_desc_array_add(packet, len);
-    if (new_actual_idx == -E_QUEUE_FULL){
-        return -E_QUEUE_FULL;
-    }
-    *((uint32_t*)(e1000 + E1000_TDT)) = new_actual_idx;
-    return 0;
-}
-
 /* Tries to add a packet to the de tx_desc_array by checking that the 
 next descriptor is free, copying the packet data into the next descriptor
 Returns:
     -E_QUEUE_FULL if the transmit queue is full
     The new tail of the transmit queue that should be set to the TBT   
 */
-int tx_desc_array_add(void* packet, uint32_t len){
+static int tx_desc_array_add(void* packet, uint32_t len){
     int transmited_len, this_len;
     int new_actual_idx = actual_idx;
     for (transmited_len = 0; transmited_len < len; transmited_len += TX_PACKET_LEN){
@@ -164,4 +148,42 @@ int tx_desc_array_add(void* packet, uint32_t len){
     }
     actual_idx = new_actual_idx;
     return actual_idx;
+}
+
+/* Tries to transmit a packet by adding it to the tx_desc_array
+and updating RDT
+Returns:
+    -E_QUEUE_FULL if the transmit queue is full
+    0 otherwise 
+*/
+int e1000_try_transmit(void* packet, uint32_t len){
+    int new_actual_idx = tx_desc_array_add(packet, len);
+    if (new_actual_idx == -E_QUEUE_FULL){
+        return -E_QUEUE_FULL;
+    }
+    setreg(E1000_TDT, new_actual_idx);
+    return 0;
+}
+
+/* Tries to receive a packet by copying it out in u_buffer
+and updating RDT 
+Returns:
+    -E_TRY_AGAIN if the receive queue is empty
+    packet len > 0 otherwise 
+*/
+int e1000_try_receive(void* u_buffer){
+    //cprintf("ADENTRO DE RECIBIR\n");
+    uint32_t rx_tail = *((uint32_t*)(e1000 + E1000_RDT));
+    rx_tail++;
+    if (rx_tail == RX_NDESC){
+        rx_tail = 0;
+    }
+    // The next one not used by e1000
+    if ((rx_desc_array[rx_tail].status & RDESC_STATUS_DD) != RDESC_STATUS_DD){
+        return -E_TRY_AGAIN;
+    } else {
+        memmove(u_buffer, KADDR(rx_desc_array[rx_tail].addr), rx_desc_array[rx_tail].length);
+        setreg(E1000_RDT, rx_tail);
+        return rx_desc_array[rx_tail].length;
+    }
 }

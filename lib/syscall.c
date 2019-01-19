@@ -123,8 +123,14 @@ sys_time_msec(void)
 	return (unsigned int) syscall(SYS_time_msec, 0, 0, 0, 0, 0, 0);
 }
 
-unsigned int
+int
 sys_e1000_try_transmit(void* packet, uint32_t len)
 {
-	return (unsigned int) syscall(SYS_e1000_try_transmit, 0, (uint32_t) packet, len, 0, 0, 0);
+	return (int) syscall(SYS_e1000_try_transmit, 0, (uint32_t) packet, len, 0, 0, 0);
+}
+
+int
+sys_e1000_try_receive(void* buffer)
+{
+	return (int) syscall(SYS_e1000_try_receive, 0, (uint32_t) buffer, 0, 0, 0, 0);
 }

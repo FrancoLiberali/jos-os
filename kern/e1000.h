@@ -123,6 +123,8 @@ the Ethernet controller needs to report the status information */
 #define TDESC_CMD_EOP_SET 0x1 /* value in the command word (TDESC.CMD) to set EOP bit to 
 indicates the last descriptor making up the packet. */
 
+#define RDESC_STATUS_DD 1 /* DD field in the status word (RDESC.STATUS)*/
+
 struct tx_desc
 {
 	uint64_t addr;
@@ -145,11 +147,6 @@ struct rx_desc
 };
 
 int e1000_attachfn (struct pci_func *pcif);
-void e1000_tx_regs_init();
-void e1000_rx_regs_init();
-void tx_desc_array_init();
-void rx_desc_array_init();
 int e1000_try_transmit(void* packet, uint32_t len);
-int tx_desc_array_add(void* packet, uint32_t len);
-
+int e1000_try_receive(void* u_buffer);
 #endif  // JOS_KERN_E1000_H
