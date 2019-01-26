@@ -86,7 +86,7 @@ static void e1000_rx_regs_init(void){
     setreg(E1000_RDH, 0);
     setreg(E1000_RDT, RX_NDESC - 1);
 
-    setreg(E1000_RCTL, E1000_RCTL_EN | E1000_RCTL_LBM_NO | //E1000_RCTL_LPE |
+    setreg(E1000_RCTL, E1000_RCTL_EN | E1000_RCTL_LBM_NO | 
                        E1000_RCTL_BAM | E1000_RCTL_SZ_2048 |  
                        E1000_RCTL_SECRC);
 }
