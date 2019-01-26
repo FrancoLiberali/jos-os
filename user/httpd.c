@@ -35,8 +35,7 @@ struct error_messages {
 };
 
 struct error_messages errors[] = {
-	{ 400, "Bad Request" },
-	{ 404, "Not Found" },
+	{ 400, "Bad Request" }, { 404, "Not Found" },
 };
 
 static void
@@ -239,15 +238,15 @@ send_file(struct http_request *req)
 
 	// LAB 6: Your code here.
 	fd = open(req->url, O_RDONLY);
-	if (fd < 0){
+	if (fd < 0) {
 		r = send_error(req, 404);
 		return r;
 	}
 	struct Stat stat;
 	if ((r = fstat(fd, &stat)) < 0)
 		goto end;
-	
-	if (stat.st_isdir){
+
+	if (stat.st_isdir) {
 		r = send_error(req, 404);
 		goto end;
 	}

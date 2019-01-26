@@ -73,11 +73,11 @@ i386_init(void)
 	// Don't touch -- used by grading script!
 	ENV_CREATE(TEST, ENV_TYPE_USER);
 
-	// Hack horrible mal para la corrección de la parte 1.
-	// -d
-	#define STRING(x) STRNG_(x)
-	#define STRNG_(x) #x
-	#define TESTED(x) (__builtin_strcmp(#x, STRING(TEST)) == 0)
+// Hack horrible mal para la corrección de la parte 1.
+// -d
+#define STRING(x) STRNG_(x)
+#define STRNG_(x) #x
+#define TESTED(x) (__builtin_strcmp(#x, STRING(TEST)) == 0)
 
 	if (TESTED(user_yield) || TESTED(user_spin0))
 		ENV_CREATE(TEST, ENV_TYPE_USER);
@@ -86,7 +86,8 @@ i386_init(void)
 	ENV_CREATE(user_icode, ENV_TYPE_USER);
 #endif  // TEST*
 
-	// Should not be necessary - drains keyboard because interrupt has given up.
+	// Should not be necessary - drains keyboard because interrupt has given
+	// up.
 	kbd_intr();
 
 	// Schedule and run the first user environment!
@@ -147,7 +148,7 @@ mp_main(void)
 	sched_yield();
 
 	// Remove this after you finish Exercise 4
-	//for (;;);
+	// for (;;);
 }
 
 /*
