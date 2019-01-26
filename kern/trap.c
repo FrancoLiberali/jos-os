@@ -263,7 +263,7 @@ trap_dispatch(struct Trapframe *tf)
 		// Add time tick increment to clock interrupts.
 		// Be careful! In multiprocessors, clock interrupts are
 		// triggered on every CPU.
-		// LAB 6: Your code here.
+		// LAB 6: I think my code goes HERE.
 		if (cpunum() == 0) {
 			time_tick();
 		}
