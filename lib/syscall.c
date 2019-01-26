@@ -124,13 +124,19 @@ sys_time_msec(void)
 }
 
 int
-sys_e1000_try_transmit(void* packet, uint32_t len)
+sys_e1000_try_transmit(void* packet, size_t len)
 {
 	return (int) syscall(SYS_e1000_try_transmit, 0, (uint32_t) packet, len, 0, 0, 0);
 }
 
 int
-sys_e1000_try_receive(void* buffer)
+sys_e1000_try_receive(void* buffer, size_t len)
 {
-	return (int) syscall(SYS_e1000_try_receive, 0, (uint32_t) buffer, 0, 0, 0, 0);
+	// Force page fault in case the page(s) is marked as copy on write
+	// to avoid page fault in kernel mode
+	for (int i = 0; i < len; i += PGSIZE){
+		uint8_t *p = buffer + i;
+    	*(volatile uint8_t *) (buffer + i)= *p;
+	}
+	return (int) syscall(SYS_e1000_try_receive, 0, (uint32_t) buffer, len, 0, 0, 0);
 }

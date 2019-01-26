@@ -447,7 +447,7 @@ sys_time_msec(void)
 //    0 if the packet was correctly appended to the transmit queue
 // Destroys the environment on memory errors.
 static int
-sys_e1000_try_transmit(void* packet, uint32_t len)
+sys_e1000_try_transmit(void* packet, size_t len)
 {
 	// Check that the user has permission to read memory [packet, packet+len).
 	// Destroy the environment if not.
@@ -459,13 +459,17 @@ sys_e1000_try_transmit(void* packet, uint32_t len)
 // and updating RDT 
 // Returns:
 //    -E_TRY_AGAIN if the receive queue is empty
+//    -E_INVAL if the recived buffer len is less than the RX_PACKET_LEN
 //    packet len > 0 otherwise 
 // Destroys the environment on memory errors.
 static int
-sys_e1000_try_receive(void* u_buffer)
+sys_e1000_try_receive(void* u_buffer, size_t len)
 {
+	if (len < RX_PACKET_LEN){
+		return -E_INVAL;
+	}
 	// Check that the user has permission to read and write 
-	// [u_buffer, u_buffer+RX_PACKET_LEN).
+	// [u_buffer, u_buffer + RX_PACKET_LEN).
 	// Destroy the environment if not.
 	user_mem_assert(curenv, u_buffer, RX_PACKET_LEN, (PTE_P | PTE_U | PTE_W));
 	return e1000_try_receive(u_buffer);
@@ -521,9 +525,9 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 	case SYS_time_msec:
 		return sys_time_msec();
 	case SYS_e1000_try_transmit:
-		return sys_e1000_try_transmit((void*) a1, (uint32_t) a2);
+		return sys_e1000_try_transmit((void*) a1, (size_t) a2);
 	case SYS_e1000_try_receive:
-		return sys_e1000_try_receive((void*) a1);
+		return sys_e1000_try_receive((void*) a1, (size_t) a2);
 	default:
 		return -E_INVAL;
 	}

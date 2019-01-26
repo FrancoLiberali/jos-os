@@ -16,6 +16,12 @@ static void setreg(uint32_t offset, uint32_t value)
   *((uint32_t*)(e1000 + offset)) = value;
 }
 
+static uint32_t
+getreg(uint32_t offset)
+{
+  return *((uint32_t*)(e1000 + offset));
+}
+
 /* Initialize each descriptor of the transmit descriptor array
 matching each descriptor to its respective buffer in the tx_buffers array
 and setting the DD field in the status word (TDESC.STATUS) to show TDESC is free 
@@ -88,7 +94,7 @@ static void e1000_rx_regs_init(void){
 int e1000_attachfn (struct pci_func *pcif){
     pci_func_enable(pcif);
     e1000 = mmio_map_region(pcif->reg_base[0], pcif->reg_size[0]);
-    cprintf("E1000 Service status register %0x\n", *((uint32_t*)(e1000 + E1000_STATUS)));
+    cprintf("E1000 Service status register %0x\n", getreg(E1000_STATUS));
 
     e1000_tx_regs_init();
     e1000_rx_regs_init();
@@ -127,7 +133,7 @@ static int tx_desc_array_add(void* packet, uint32_t len){
             return -E_QUEUE_FULL;
         }
         /* no more free */
-        tx_desc_array[new_actual_idx].status = 0;//tx_desc_array[new_actual_idx].status & ~(TDESC_STATUS_DD);
+        tx_desc_array[new_actual_idx].status = 0;
         if (len - transmited_len > TX_PACKET_LEN){
             this_len = TX_PACKET_LEN;
             /* set the RS field in the command word (TDESC.CMD) to advise
@@ -172,7 +178,7 @@ Returns:
     packet len > 0 otherwise 
 */
 int e1000_try_receive(void* u_buffer){
-    uint32_t rx_tail = *((uint32_t*)(e1000 + E1000_RDT));
+    uint32_t rx_tail = getreg(E1000_RDT);
     rx_tail++;
     if (rx_tail == RX_NDESC){
         rx_tail = 0;

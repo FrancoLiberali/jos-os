@@ -17,8 +17,7 @@ input(envid_t ns_envid)
 	while (true){
 		// swap IPC input buffer page
 		for (int i = 0; i < NIPCINBUF; i++){
-			nsipcinbuf[i].pkt.jp_data[0] = 'a';
-			int received = sys_e1000_try_receive(nsipcinbuf[i].pkt.jp_data);
+			int received = sys_e1000_try_receive(nsipcinbuf[i].pkt.jp_data, PGSIZE - sizeof(int));
 			// if receive queue empty
 			if (received == -E_TRY_AGAIN){
 				sys_yield();
