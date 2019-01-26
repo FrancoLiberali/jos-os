@@ -1,0 +1,787 @@
+diff --git a/inc/error.h b/inc/error.h
+index 181e34c..4c026af 100644
+--- a/inc/error.h
++++ b/inc/error.h
+@@ -26,6 +26,9 @@ enum {
+ 	E_NOT_EXEC	,	// File not a valid executable
+ 	E_NOT_SUPP	,	// Operation not supported
+ 
++	E_QUEUE_FULL,   // e1000 transmit queue full
++	E_TRY_AGAIN,    // e1000 receive queue empty
++
+ 	MAXERROR
+ };
+ 
+diff --git a/inc/lib.h b/inc/lib.h
+index 66740e8..fb3d30b 100644
+--- a/inc/lib.h
++++ b/inc/lib.h
+@@ -60,6 +60,8 @@ int	sys_page_unmap(envid_t env, void *pg);
+ int	sys_ipc_try_send(envid_t to_env, uint32_t value, void *pg, int perm);
+ int	sys_ipc_recv(void *rcv_pg);
+ unsigned int sys_time_msec(void);
++int sys_e1000_try_transmit(void* packet, size_t len);
++int sys_e1000_try_receive(void* buffer, size_t len);
+ 
+ // This must be inlined.  Exercise for reader: why?
+ static inline envid_t __attribute__((always_inline))
+diff --git a/inc/ns.h b/inc/ns.h
+index 27d760b..5955efd 100644
+--- a/inc/ns.h
++++ b/inc/ns.h
+@@ -7,6 +7,10 @@
+ #include <inc/mmu.h>
+ #include <lwip/sockets.h>
+ 
++// amount of physical pages to use ad buffer 
++// to receive packets and IPC to the network server
++#define NIPCINBUF   3
++
+ struct jif_pkt {
+ 	int jp_len;
+ 	char jp_data[0];
+diff --git a/inc/syscall.h b/inc/syscall.h
+index 36f26de..fa69ea2 100644
+--- a/inc/syscall.h
++++ b/inc/syscall.h
+@@ -18,6 +18,8 @@ enum {
+ 	SYS_ipc_try_send,
+ 	SYS_ipc_recv,
+ 	SYS_time_msec,
++	SYS_e1000_try_transmit,
++	SYS_e1000_try_receive,
+ 	NSYSCALLS
+ };
+ 
+diff --git a/kern/e1000.c b/kern/e1000.c
+index 7570e75..a51f22d 100644
+--- a/kern/e1000.c
++++ b/kern/e1000.c
+@@ -1,3 +1,223 @@
+ #include <kern/e1000.h>
++#include <kern/pmap.h>
++#include <inc/string.h>
++#include <inc/error.h>
+ 
+ // LAB 6: Your driver code here
++volatile void *e1000;
++struct tx_desc *tx_desc_array;
++struct rx_desc *rx_desc_array;
++tx_packet_t *tx_buffers;
++rx_packet_t *rx_buffers;
++uint32_t actual_idx;
++
++static void
++setreg(uint32_t offset, uint32_t value)
++{
++	*((uint32_t *) (e1000 + offset)) = value;
++}
++
++static uint32_t
++getreg(uint32_t offset)
++{
++	return *((uint32_t *) (e1000 + offset));
++}
++
++/* Initialize each descriptor of the transmit descriptor array
++matching each descriptor to its respective buffer in the tx_buffers array
++and setting the DD field in the status word (TDESC.STATUS) to show TDESC is free
++*/
++static void
++tx_desc_array_init()
++{
++	for (int i = 0; i < TX_NDESC; i++) {
++		tx_desc_array[i].addr = (uint32_t) PADDR(tx_buffers + i);
++		/* initialy free */
++		tx_desc_array[i].status = TDESC_STATUS_DD;
++	}
++}
++
++/* Perform the initialization steps described in section
++14.5 of Intel's Software Developer's Manual for the E1000 */
++static void
++e1000_tx_regs_init()
++{
++	setreg(E1000_TDBAL, (uint32_t) PADDR(tx_desc_array));
++	setreg(E1000_TDBAH, 0);
++	setreg(E1000_TDLEN, TX_NDESC * sizeof(struct tx_desc));
++	setreg(E1000_TDH, 0);
++	setreg(E1000_TDT, 0);
++
++	setreg(E1000_TCTL,
++	       E1000_TCTL_EN | E1000_TCTL_PSP |
++	               E1000_TCTL_COLD_DUPLEX << E1000_TCTL_COLD_BIT);
++
++	setreg(E1000_TIPG,
++	       E1000_TIPG_IPGT_IEEE802p3 << E1000_TIPG_IPGT_BIT |
++	               E1000_TIPG_IPGR1_IEEE802p3 << E1000_TIPG_IPGR1_BIT |
++	               E1000_TIPG_IPGR2_IEEE802p3 << E1000_TIPG_IPGR2_BIT);
++
++	tx_desc_array_init();
++}
++
++/* Initialize each descriptor of the receive descriptor array
++matching each descriptor to its respective buffer in the rx_buffers array
++*/
++static void
++rx_desc_array_init()
++{
++	for (int i = 0; i < RX_NDESC; i++) {
++		rx_desc_array[i].addr = (uint32_t) PADDR(rx_buffers + i);
++	}
++}
++
++/* Perform the initialization steps described in section
++14.4 of Intel's Software Developer's Manual for the E1000 */
++static void
++e1000_rx_regs_init(void)
++{
++	setreg(E1000_RAL, QEMU_DEFAULT_MAC_L);
++	setreg(E1000_RAH, QEMU_DEFAULT_MAC_H | E1000_RAH_AV);
++
++	for (int i = 1; i < 16; i++) {
++		setreg(E1000_RAL + 8 * i, 0);
++		setreg(E1000_RAH + 8 * i, 0);
++	}
++
++	memset((void *) (e1000 + E1000_MTA), 0, E1000_MTA_LEN);
++
++	setreg(E1000_IMS, E1000_IMS_DISABLE);
++
++	setreg(E1000_RDBAL, (uint32_t) PADDR(rx_desc_array));
++	setreg(E1000_RDBAH, 0);
++	setreg(E1000_RDLEN, RX_NDESC * sizeof(struct rx_desc));
++
++	rx_desc_array_init();
++
++	setreg(E1000_RDH, 0);
++	setreg(E1000_RDT, RX_NDESC - 1);
++
++	setreg(E1000_RCTL,
++	       E1000_RCTL_EN | E1000_RCTL_LBM_NO | E1000_RCTL_BAM |
++	               E1000_RCTL_SZ_2048 | E1000_RCTL_SECRC);
++}
++
++int
++e1000_attachfn(struct pci_func *pcif)
++{
++	pci_func_enable(pcif);
++	e1000 = mmio_map_region(pcif->reg_base[0], pcif->reg_size[0]);
++	cprintf("E1000 Service status register %0x\n", getreg(E1000_STATUS));
++
++	e1000_tx_regs_init();
++	e1000_rx_regs_init();
++
++	/*char packet1[] = "PRUEBA 1";
++	transmit(packet1, sizeof(packet1));
++	char packet2[] = "PRUEBA 2";
++	transmit(packet2, sizeof(packet2));
++	char packet3[] = "PRUEBA 3";
++	transmit(packet3, sizeof(packet3));
++	char packet4[] = "PRUEBA 4";
++	transmit(packet4, sizeof(packet4));
++	char packet5[] = "PRUEBA 5 MAS LARGA";
++	transmit(packet5, sizeof(packet5));
++	char packet6[2000] = "PRUEBA 6 PAQUETE QUE NO ENTRA";
++	transmit(packet6, sizeof(packet6));
++	for (int i = 0; i < 64; i++){
++	    transmit(packet5, sizeof(packet5));
++	}*/
++
++	return 0;
++}
++
++/* Tries to add a packet to the de tx_desc_array by checking that the
++next descriptor is free, copying the packet data into the next descriptor
++Returns:
++    -E_QUEUE_FULL if the transmit queue is full
++    The new tail of the transmit queue that should be set to the TBT
++*/
++static int
++tx_desc_array_add(void *packet, uint32_t len)
++{
++	int transmited_len, this_len;
++	int new_actual_idx = actual_idx;
++	for (transmited_len = 0; transmited_len < len;
++	     transmited_len += TX_PACKET_LEN) {
++		/* if the next one not is free */
++		if ((tx_desc_array[new_actual_idx].status & TDESC_STATUS_DD) !=
++		    TDESC_STATUS_DD) {
++			return -E_QUEUE_FULL;
++		}
++		/* no more free */
++		tx_desc_array[new_actual_idx].status = 0;
++		if (len - transmited_len > TX_PACKET_LEN) {
++			this_len = TX_PACKET_LEN;
++			/* set the RS field in the command word (TDESC.CMD) to
++			advise
++			the Ethernet controller needs to report the status
++			information */
++			tx_desc_array[new_actual_idx].cmd = TDESC_CMD_RS_SET;
++		} else {
++			this_len = len - transmited_len;
++			/* set the RS field and the EOP because it is the last
++			 * part of the packet */
++			tx_desc_array[new_actual_idx].cmd =
++			        TDESC_CMD_RS_SET | TDESC_CMD_EOP_SET;
++		}
++		tx_desc_array[new_actual_idx].length = this_len;
++		memmove(KADDR(tx_desc_array[new_actual_idx].addr),
++		        packet + transmited_len,
++		        this_len);
++		new_actual_idx++;
++		/* if reach the the end of the circular array */
++		if (new_actual_idx == TX_NDESC) {
++			new_actual_idx = 0;
++		}
++	}
++	actual_idx = new_actual_idx;
++	return actual_idx;
++}
++
++/* Tries to transmit a packet by adding it to the tx_desc_array
++and updating RDT
++Returns:
++    -E_QUEUE_FULL if the transmit queue is full
++    0 otherwise
++*/
++int
++e1000_try_transmit(void *packet, uint32_t len)
++{
++	int new_actual_idx = tx_desc_array_add(packet, len);
++	if (new_actual_idx == -E_QUEUE_FULL) {
++		return -E_QUEUE_FULL;
++	}
++	setreg(E1000_TDT, new_actual_idx);
++	return 0;
++}
++
++/* Tries to receive a packet by copying it out in u_buffer
++and updating RDT
++Returns:
++    -E_TRY_AGAIN if the receive queue is empty
++    packet len > 0 otherwise
++*/
++int
++e1000_try_receive(void *u_buffer)
++{
++	uint32_t rx_tail = getreg(E1000_RDT);
++	rx_tail++;
++	if (rx_tail == RX_NDESC) {
++		rx_tail = 0;
++	}
++	// The next one not used by e1000
++	if ((rx_desc_array[rx_tail].status & RDESC_STATUS_DD) != RDESC_STATUS_DD) {
++		return -E_TRY_AGAIN;
++	} else {
++		memmove(u_buffer,
++		        KADDR(rx_desc_array[rx_tail].addr),
++		        rx_desc_array[rx_tail].length);
++		setreg(E1000_RDT, rx_tail);
++		return rx_desc_array[rx_tail].length;
++	}
++}
+diff --git a/kern/e1000.h b/kern/e1000.h
+index abdf80d..42e984c 100644
+--- a/kern/e1000.h
++++ b/kern/e1000.h
+@@ -1,4 +1,165 @@
+ #ifndef JOS_KERN_E1000_H
+ #define JOS_KERN_E1000_H
+ 
+-#endif  // JOS_KERN_E1000_H
++#include <kern/pci.h>
++//#include <kern/tx_desc_array.h>
++
++#define E1000_VENDOR_ID 0x8086
++#define E1000_DEVICE_ID 0x100E
++
++/* Register Set. (82543, 82544)
++ *
++ * Registers are defined to be 32 bits and  should be accessed as 32 bit values.
++ * These registers are physically located on the NIC, but are mapped into the
++ * host memory address space.
++ *
++ * RW - register is both readable and writable
++ * RO - register is read only
++ * WO - register is write only
++ * R/clr - register is read only and is cleared when read
++ * A - register array
++ */
++#define E1000_STATUS 0x00008 /* Device Status - RO */
++
++#define E1000_TDBAL 0x03800 /* TX Descriptor Base Address Low - RW */
++#define E1000_TDBAH 0x03804 /* TX Descriptor Base Address High - RW */
++#define E1000_TDLEN 0x03808 /* TX Descriptor Length - RW */
++#define E1000_TDH 0x03810   /* TX Descriptor Head - RW */
++#define E1000_TDT 0x03818   /* TX Descripotr Tail - RW */
++
++#define E1000_TCTL 0x00400         /* TX Control - RW */
++#define E1000_TCTL_EN 0x00000002   /* enable tx */
++#define E1000_TCTL_PSP 0x00000008  /* pad short packets */
++#define E1000_TCTL_COLD 0x003ff000 /* collision distance */
++#define E1000_TCTL_COLD_DUPLEX                                                 \
++	0x40                   /* collision distance value for full duplex*/
++#define E1000_TCTL_COLD_BIT 12 /* initial bit of the TCTL.COLD */
++
++#define E1000_TIPG 0x00410    /* TX Inter-packet gap -RW */
++#define E1000_TIPG_IPGT_BIT 0 /* initial bit of the TIPG.IPGT */
++#define E1000_TIPG_IPGT_IEEE802p3                                              \
++	10 /* expected value for TIPG.IPGT in IEEE 802.3*/
++/* IPGR1 and IPGR2 are not needed in full duplex, but are easier to always
++program to the values
++shown. */
++#define E1000_TIPG_IPGR1_BIT 10 /* initial bit of the TIPG.IPGR1 */
++#define E1000_TIPG_IPGR1_IEEE802p3                                             \
++	(2 * E1000_TIPG_IPGR2_IEEE802p3 /                                      \
++	 3)                     /* expected value for TIPG.IPGR1 in IEEE 802.3*/
++#define E1000_TIPG_IPGR2_BIT 20 /* initial bit of the TIPG.IPGR2 */
++#define E1000_TIPG_IPGR2_IEEE802p3                                             \
++	6 /* expected value for TIPG.IPGR2 in IEEE 802.3*/
++
++#define E1000_RDBAL 0x02800 /* RX Descriptor Base Address Low - RW */
++#define E1000_RDBAH 0x02804 /* RX Descriptor Base Address High - RW */
++/* Receive Address */
++#define E1000_RAH_AV 0x80000000 /* Receive descriptor valid */
++#define E1000_RDLEN 0x02808     /* RX Descriptor Length - RW */
++#define E1000_RDH 0x02810       /* RX Descriptor Head - RW */
++#define E1000_RDT 0x02818       /* RX Descriptor Tail - RW */
++
++#define E1000_MTA 0x05200      /* Multicast Table Array - RW Array */
++#define E1000_MTA_LEN 4096 / 8 /* Multicast Table Array len in bytes */
++#define E1000_RAL 0x05400      /* Receive Address Low 0 - RW*/
++#define E1000_RAH 0x05404      /* Receive Address High 0 - RW*/
++#define QEMU_DEFAULT_MAC_L                                                     \
++	0x12005452 /* the low-order 32 bits of the QEMU default MAC address */
++#define QEMU_DEFAULT_MAC_H                                                     \
++	0x5634 /* the high-order 16 bits of the QEMU default MAC address */
++#define E1000_IMS 0x000D0   /* Interrupt Mask Set - RW */
++#define E1000_IMS_DISABLE 0 /* Value in the IMS to disable interumps */
++
++#define E1000_RCTL 0x00100 /* RX Control - RW */
++/* Receive Control */
++#define E1000_RCTL_EN 0x00000002             /* enable */
++#define E1000_RCTL_SBP 0x00000004            /* store bad packet */
++#define E1000_RCTL_UPE 0x00000008            /* unicast promiscuous enable */
++#define E1000_RCTL_MPE 0x00000010            /* multicast promiscuous enab */
++#define E1000_RCTL_LPE 0x00000020            /* long packet enable */
++#define E1000_RCTL_LBM_NO 0x00000000         /* no loopback mode */
++#define E1000_RCTL_LBM_MAC 0x00000040        /* MAC loopback mode */
++#define E1000_RCTL_LBM_SLP 0x00000080        /* serial link loopback mode */
++#define E1000_RCTL_LBM_TCVR 0x000000C0       /* tcvr loopback mode */
++#define E1000_RCTL_DTYP_MASK 0x00000C00      /* Descriptor type mask */
++#define E1000_RCTL_DTYP_PS 0x00000400        /* Packet Split descriptor */
++#define E1000_RCTL_RDMTS_HALF 0x00000000     /* rx desc min threshold size */
++#define E1000_RCTL_RDMTS_QUAT 0x00000100     /* rx desc min threshold size */
++#define E1000_RCTL_RDMTS_EIGTH 0x00000200    /* rx desc min threshold size */
++#define E1000_RCTL_RDMTS_RESERVED 0x00000300 /* RDMTS reserved */
++#define E1000_RCTL_MO_SHIFT 12               /* multicast offset shift */
++#define E1000_RCTL_MO_0 0x00000000           /* multicast offset 11:0 */
++#define E1000_RCTL_MO_1 0x00001000           /* multicast offset 12:1 */
++#define E1000_RCTL_MO_2 0x00002000           /* multicast offset 13:2 */
++#define E1000_RCTL_MO_3 0x00003000           /* multicast offset 15:4 */
++#define E1000_RCTL_MDR 0x00004000            /* multicast desc ring 0 */
++#define E1000_RCTL_BAM 0x00008000            /* broadcast enable */
++/* these buffer sizes are valid if E1000_RCTL_BSEX is 0 */
++#define E1000_RCTL_SZ_2048 0x00000000 /* rx buffer size 2048 */
++#define E1000_RCTL_SZ_1024 0x00010000 /* rx buffer size 1024 */
++#define E1000_RCTL_SZ_512 0x00020000  /* rx buffer size 512 */
++#define E1000_RCTL_SZ_256 0x00030000  /* rx buffer size 256 */
++/* these buffer sizes are valid if E1000_RCTL_BSEX is 1 */
++#define E1000_RCTL_SZ_16384 0x00010000    /* rx buffer size 16384 */
++#define E1000_RCTL_SZ_8192 0x00020000     /* rx buffer size 8192 */
++#define E1000_RCTL_SZ_4096 0x00030000     /* rx buffer size 4096 */
++#define E1000_RCTL_VFE 0x00040000         /* vlan filter enable */
++#define E1000_RCTL_CFIEN 0x00080000       /* canonical form enable */
++#define E1000_RCTL_CFI 0x00100000         /* canonical form indicator */
++#define E1000_RCTL_DPF 0x00400000         /* discard pause frames */
++#define E1000_RCTL_PMCF 0x00800000        /* pass MAC control frames */
++#define E1000_RCTL_BSEX 0x02000000        /* Buffer size extension */
++#define E1000_RCTL_SECRC 0x04000000       /* Strip Ethernet CRC */
++#define E1000_RCTL_FLXBUF_MASK 0x78000000 /* Flexible buffer size */
++#define E1000_RCTL_FLXBUF_SHIFT 27        /* Flexible buffer shift */
++
++#define TX_NDESC 64        /* Descriptors in the transmit descriptor array */
++#define RX_NDESC 128       /* Descriptors in the receive descriptor array */
++#define TX_PACKET_LEN 1518 /* Maximum size of an Ethernet packet in bytes */
++typedef struct tx_packet {
++	char buffer[TX_PACKET_LEN];
++} tx_packet_t;
++#define RX_PACKET_LEN                                                          \
++	2048 /* Minimum E1000 allow rx buffer size that is                     \
++bigger than the maximum size of an Ethernet packet in bytes */
++typedef struct rx_packet {
++	char buffer[RX_PACKET_LEN];
++} rx_packet_t;
++
++extern struct tx_desc *tx_desc_array;
++extern struct rx_desc *rx_desc_array;
++extern tx_packet_t *tx_buffers;
++extern rx_packet_t *rx_buffers;
++
++#define TDESC_STATUS_DD 1 /* DD field in the status word (TDESC.STATUS)*/
++#define TDESC_CMD_RS_SET                                                       \
++	0x8 /* value in the command word (TDESC.CMD) to set RS bit to advise   \
++the Ethernet controller needs to report the status information */
++#define TDESC_CMD_EOP_SET                                                      \
++	0x1 /* value in the command word (TDESC.CMD) to set EOP bit to         \
++indicates the last descriptor making up the packet. */
++
++#define RDESC_STATUS_DD 1 /* DD field in the status word (RDESC.STATUS)*/
++
++struct tx_desc {
++	uint64_t addr;
++	uint16_t length;
++	uint8_t cso;
++	uint8_t cmd;
++	uint8_t status;
++	uint8_t css;
++	uint16_t special;
++};
++
++struct rx_desc {
++	uint64_t addr;
++	uint16_t length;
++	uint16_t packet_checksum;
++	uint8_t status;
++	uint8_t errors;
++	uint16_t special;
++};
++
++int e1000_attachfn(struct pci_func *pcif);
++int e1000_try_transmit(void *packet, uint32_t len);
++int e1000_try_receive(void *u_buffer);
++#endif  // JOS_KERN_E1000_H
+\ No newline at end of file
+diff --git a/kern/pci.c b/kern/pci.c
+index 784e072..e4dd4f8 100644
+--- a/kern/pci.c
++++ b/kern/pci.c
+@@ -31,6 +31,7 @@ struct pci_driver pci_attach_class[] = {
+ // pci_attach_vendor matches the vendor ID and device ID of a PCI device. key1
+ // and key2 should be the vendor ID and device ID respectively
+ struct pci_driver pci_attach_vendor[] = {
++	{ E1000_VENDOR_ID, E1000_DEVICE_ID,  &e1000_attachfn },
+ 	{ 0, 0, 0 },
+ };
+ 
+diff --git a/kern/pmap.c b/kern/pmap.c
+index 5d57a81..d58c549 100644
+--- a/kern/pmap.c
++++ b/kern/pmap.c
+@@ -9,6 +9,7 @@
+ #include <kern/pmap.h>
+ #include <kern/kclock.h>
+ #include <kern/env.h>
++#include <kern/e1000.h>
+ #include <kern/cpu.h>
+ 
+ // These variables are set by i386_detect_memory()
+@@ -175,6 +176,32 @@ mem_init(void)
+ 	memset(envs, 0, NENV * sizeof(struct Env));
+ 
+ 	//////////////////////////////////////////////////////////////////////
++	// (LAB 6)
++	// Make 'tx_desc_array' point to an array of size 'TX_NDESC' of 'struct
++	// tx_desc'.
++	// boot_alloc return page aligned memory so tx_desc_array is aligned
++	// on a paragraph (16-byte) boundary.
++	tx_desc_array =
++	        (struct tx_desc *) boot_alloc(TX_NDESC * sizeof(struct tx_desc));
++	memset(tx_desc_array, 0, TX_NDESC * sizeof(struct tx_desc));
++	// Make 'tx_buffers' point to an array of size 'TX_NDESC' of
++	// 'tx_packet_t'.
++	tx_buffers = (tx_packet_t *) boot_alloc(TX_NDESC * sizeof(tx_packet_t));
++	memset(tx_buffers, 0, TX_NDESC * sizeof(tx_packet_t));
++
++	// Make 'rx_desc_array' point to an array of size 'RX_NDESC' of 'struct
++	// rx_desc'.
++	// boot_alloc return page aligned memory so rx_desc_array is aligned
++	// on a paragraph (16-byte) boundary.
++	rx_desc_array =
++	        (struct rx_desc *) boot_alloc(RX_NDESC * sizeof(struct rx_desc));
++	memset(rx_desc_array, 0, RX_NDESC * sizeof(struct rx_desc));
++	// Make 'rx_buffers' point to an array of size 'RX_NDESC' of
++	// 'rx_packet_t'.
++	rx_buffers = (rx_packet_t *) boot_alloc(RX_NDESC * sizeof(rx_packet_t));
++	memset(rx_buffers, 0, RX_NDESC * sizeof(rx_packet_t));
++
++	//////////////////////////////////////////////////////////////////////
+ 	// Now that we've allocated the initial kernel data structures, we set
+ 	// up the list of free physical pages. Once we've done so, all further
+ 	// memory management will go through the page_* functions. In
+diff --git a/kern/syscall.c b/kern/syscall.c
+index 83647f5..428c38b 100644
+--- a/kern/syscall.c
++++ b/kern/syscall.c
+@@ -12,6 +12,7 @@
+ #include <kern/console.h>
+ #include <kern/sched.h>
+ #include <kern/time.h>
++#include <kern/e1000.h>
+ 
+ // Print a string to the system console.
+ // The string is exactly 'len' characters long.
+@@ -436,7 +437,43 @@ static int
+ sys_time_msec(void)
+ {
+ 	// LAB 6: Your code here.
+-	panic("sys_time_msec not implemented");
++	return time_msec();
++}
++
++// Try to transmit the message inside 'packet'
++// of large 'len'.
++// Returns:
++//    -E_QUEUE_FULL if the transmit queue is full
++//    0 if the packet was correctly appended to the transmit queue
++// Destroys the environment on memory errors.
++static int
++sys_e1000_try_transmit(void *packet, size_t len)
++{
++	// Check that the user has permission to read memory [packet,
++	// packet+len).
++	// Destroy the environment if not.
++	user_mem_assert(curenv, packet, len, (PTE_P | PTE_U));
++	return e1000_try_transmit(packet, len);
++}
++
++// Tries to receive a packet by copying it out in u_buffer
++// and updating RDT
++// Returns:
++//    -E_TRY_AGAIN if the receive queue is empty
++//    -E_INVAL if the recived buffer len is less than the RX_PACKET_LEN
++//    packet len > 0 otherwise
++// Destroys the environment on memory errors.
++static int
++sys_e1000_try_receive(void *u_buffer, size_t len)
++{
++	if (len < RX_PACKET_LEN) {
++		return -E_INVAL;
++	}
++	// Check that the user has permission to read and write
++	// [u_buffer, u_buffer + RX_PACKET_LEN).
++	// Destroy the environment if not.
++	user_mem_assert(curenv, u_buffer, RX_PACKET_LEN, (PTE_P | PTE_U | PTE_W));
++	return e1000_try_receive(u_buffer);
+ }
+ 
+ // Dispatches to the correct kernel function, passing the arguments.
+@@ -486,6 +523,12 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4,
+ 	case SYS_env_set_trapframe:
+ 		return sys_env_set_trapframe((envid_t) a1,
+ 		                             (struct Trapframe *) a2);
++	case SYS_time_msec:
++		return sys_time_msec();
++	case SYS_e1000_try_transmit:
++		return sys_e1000_try_transmit((void *) a1, (size_t) a2);
++	case SYS_e1000_try_receive:
++		return sys_e1000_try_receive((void *) a1, (size_t) a2);
+ 	default:
+ 		return -E_INVAL;
+ 	}
+diff --git a/kern/trap.c b/kern/trap.c
+index 21d37e9..7ffc3b6 100644
+--- a/kern/trap.c
++++ b/kern/trap.c
+@@ -260,6 +260,13 @@ trap_dispatch(struct Trapframe *tf)
+ 	// interrupt using lapic_eoi() before calling the scheduler!
+ 	// LAB 4: Your code here.
+ 	if (tf->tf_trapno == IRQ_OFFSET + IRQ_TIMER) {
++		// Add time tick increment to clock interrupts.
++		// Be careful! In multiprocessors, clock interrupts are
++		// triggered on every CPU.
++		// LAB 6: I think my code goes HERE.
++		if (cpunum() == 0) {
++			time_tick();
++		}
+ 		lapic_eoi();
+ 		sched_yield();
+ 	}
+@@ -267,8 +274,7 @@ trap_dispatch(struct Trapframe *tf)
+ 	// Add time tick increment to clock interrupts.
+ 	// Be careful! In multiprocessors, clock interrupts are
+ 	// triggered on every CPU.
+-	// LAB 6: Your code here.
+-
++	// LAB 6: Your code here.????
+ 
+ 	// Handle keyboard and serial interrupts.
+ 	// LAB 5: Your code here.
+diff --git a/lib/nsipc.c b/lib/nsipc.c
+index 420c9e3..131df21 100644
+--- a/lib/nsipc.c
++++ b/lib/nsipc.c
+@@ -7,6 +7,7 @@
+ // Virtual address at which to receive page mappings containing client requests.
+ #define REQVA		0x0ffff000
+ union Nsipc nsipcbuf __attribute__((aligned(PGSIZE)));
++union Nsipc nsipcinbuf[NIPCINBUF] __attribute__((aligned(PGSIZE)));
+ 
+ // Send an IP request to the network server, and wait for a reply.
+ // The request body should be in nsipcbuf, and parts of the response
+diff --git a/lib/syscall.c b/lib/syscall.c
+index 9e1a1d9..2f9578e 100644
+--- a/lib/syscall.c
++++ b/lib/syscall.c
+@@ -122,3 +122,21 @@ sys_time_msec(void)
+ {
+ 	return (unsigned int) syscall(SYS_time_msec, 0, 0, 0, 0, 0, 0);
+ }
++
++int
++sys_e1000_try_transmit(void* packet, size_t len)
++{
++	return (int) syscall(SYS_e1000_try_transmit, 0, (uint32_t) packet, len, 0, 0, 0);
++}
++
++int
++sys_e1000_try_receive(void* buffer, size_t len)
++{
++	// Force page fault in case the page(s) is marked as copy on write
++	// to avoid page fault in kernel mode
++	for (int i = 0; i < len; i += PGSIZE){
++		uint8_t *p = buffer + i;
++    	*(volatile uint8_t *) (buffer + i)= *p;
++	}
++	return (int) syscall(SYS_e1000_try_receive, 0, (uint32_t) buffer, len, 0, 0, 0);
++}
+diff --git a/net/input.c b/net/input.c
+index 4e08f0f..60ff4fd 100644
+--- a/net/input.c
++++ b/net/input.c
+@@ -1,6 +1,7 @@
+ #include "ns.h"
++#include <inc/lib.h>
+ 
+-extern union Nsipc nsipcbuf;
++extern union Nsipc nsipcinbuf[NIPCINBUF];
+ 
+ void
+ input(envid_t ns_envid)
+@@ -13,4 +14,24 @@ input(envid_t ns_envid)
+ 	// Hint: When you IPC a page to the network server, it will be
+ 	// reading from it for a while, so don't immediately receive
+ 	// another packet in to the same physical page.
++	while (true) {
++		// swap IPC input buffer page
++		for (int i = 0; i < NIPCINBUF; i++) {
++			int received =
++			        sys_e1000_try_receive(nsipcinbuf[i].pkt.jp_data,
++			                              PGSIZE - sizeof(int));
++			// if receive queue empty
++			if (received == -E_TRY_AGAIN) {
++				sys_yield();
++				continue;
++			} else {
++				nsipcinbuf[i].pkt.jp_len = received;
++				ipc_send(ns_envid,
++				         NSREQ_INPUT,
++				         (void *) &(nsipcinbuf[i]),
++				         (PTE_P | PTE_U | PTE_W));
++				sys_yield();
++			}
++		}
++	}
+ }
+diff --git a/net/output.c b/net/output.c
+index f577c4e..b6962af 100644
+--- a/net/output.c
++++ b/net/output.c
+@@ -1,4 +1,5 @@
+ #include "ns.h"
++#include <inc/lib.h>
+ 
+ extern union Nsipc nsipcbuf;
+ 
+@@ -10,4 +11,22 @@ output(envid_t ns_envid)
+ 	// LAB 6: Your code here:
+ 	// 	- read a packet from the network server
+ 	//	- send the packet to the device driver
++	while (true) {
++		int32_t value = ipc_recv(NULL, (void *) &nsipcbuf, NULL);
++		if (value < 0) {
++			panic("ipc_send: failed to send");
++		}
++		// recv the supported IPC message
++		if (value == NSREQ_OUTPUT) {
++			int error = 1;
++			while (error) {
++				error = sys_e1000_try_transmit(
++				        nsipcbuf.pkt.jp_data, nsipcbuf.pkt.jp_len);
++				// if transmit queue full
++				if (error) {
++					sys_yield();
++				}
++			}
++		}
++	}
+ }
+diff --git a/user/httpd.c b/user/httpd.c
+index af1979a..0de1e4a 100644
+--- a/user/httpd.c
++++ b/user/httpd.c
+@@ -35,8 +35,7 @@ struct error_messages {
+ };
+ 
+ struct error_messages errors[] = {
+-	{ 400, "Bad Request" },
+-	{ 404, "Not Found" },
++	{ 400, "Bad Request" }, { 404, "Not Found" },
+ };
+ 
+ static void
+@@ -75,10 +74,19 @@ send_header(struct http_request *req, int code)
+ }
+ 
+ static int
+-send_data(struct http_request *req, int fd)
++send_data(struct http_request *req, int fd, off_t file_size)
+ {
+ 	// LAB 6: Your code here.
+-	panic("send_data not implemented");
++	int r;
++	char buf[file_size];
++	if ((r = readn(fd, buf, file_size)) < file_size)
++		return r;
++
++	if (write(req->sock, buf, file_size) != file_size) {
++		die("Failed to send bytes to client");
++	}
++
++	return 0;
+ }
+ 
+ static int
+@@ -229,7 +237,21 @@ send_file(struct http_request *req)
+ 	// set file_size to the size of the file
+ 
+ 	// LAB 6: Your code here.
+-	panic("send_file not implemented");
++	fd = open(req->url, O_RDONLY);
++	if (fd < 0) {
++		r = send_error(req, 404);
++		return r;
++	}
++	struct Stat stat;
++	if ((r = fstat(fd, &stat)) < 0)
++		goto end;
++
++	if (stat.st_isdir) {
++		r = send_error(req, 404);
++		goto end;
++	}
++
++	file_size = stat.st_size;
+ 
+ 	if ((r = send_header(req, 200)) < 0)
+ 		goto end;
+@@ -243,7 +265,7 @@ send_file(struct http_request *req)
+ 	if ((r = send_header_fin(req)) < 0)
+ 		goto end;
+ 
+-	r = send_data(req, fd);
++	r = send_data(req, fd, file_size);
+ 
+ end:
+ 	close(fd);
