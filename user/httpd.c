@@ -77,14 +77,15 @@ static int
 send_data(struct http_request *req, int fd)
 {
 	// LAB 6: Your code here.
-	int r;
+	int r, total = 0;
 	char buf[BUFFSIZE];
 	while ((r = read(fd, buf, sizeof(buf))) > 0) {
 		if (write(req->sock, buf, r) != r) {
 			die("Failed to send bytes to client");
 		}
+		total += r;
 	}
-	return 0;
+	return total;
 }
 
 static int
