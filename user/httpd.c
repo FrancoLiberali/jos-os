@@ -79,7 +79,7 @@ send_data(struct http_request *req, int fd)
 	// LAB 6: Your code here.
 	int r;
 	char buf[BUFFSIZE];
-	while((r = read(fd, buf, sizeof(buf))) > 0){
+	while ((r = read(fd, buf, sizeof(buf))) > 0) {
 		if (write(req->sock, buf, r) != r) {
 			die("Failed to send bytes to client");
 		}

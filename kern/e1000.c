@@ -5,12 +5,10 @@
 
 // LAB 6: Your driver code here
 volatile void *e1000;
-static struct tx_desc tx_desc_array[TX_NDESC]
-    __attribute__((aligned(16)));
+static struct tx_desc tx_desc_array[TX_NDESC] __attribute__((aligned(16)));
 static tx_packet_t tx_buffers[TX_NDESC];
 
-static struct rx_desc rx_desc_array[RX_NDESC]
-    __attribute__((aligned(16)));
+static struct rx_desc rx_desc_array[RX_NDESC] __attribute__((aligned(16)));
 static rx_packet_t rx_buffers[RX_NDESC];
 uint32_t actual_idx;
 
@@ -203,7 +201,7 @@ e1000_try_transmit(void *packet, uint32_t len)
 and updating RDT
 Returns:
     -E_TRY_AGAIN if the receive queue is empty
-	-E_NO_MEM if the recived buffer len is less than the packet len
+        -E_NO_MEM if the recived buffer len is less than the packet len
     packet len > 0 otherwise
 */
 int
