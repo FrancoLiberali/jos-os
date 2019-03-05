@@ -1,8 +1,6 @@
 #include "ns.h"
 #include <inc/lib.h>
 
-extern union Nsipc nsipcinbuf[NIPCINBUF];
-
 void
 input(envid_t ns_envid)
 {
@@ -14,6 +12,7 @@ input(envid_t ns_envid)
 	// Hint: When you IPC a page to the network server, it will be
 	// reading from it for a while, so don't immediately receive
 	// another packet in to the same physical page.
+	static union Nsipc nsipcinbuf[NIPCINBUF] __attribute__((aligned(PGSIZE)));
 	while (true) {
 		// swap IPC input buffer page
 		for (int i = 0; i < NIPCINBUF; i++) {

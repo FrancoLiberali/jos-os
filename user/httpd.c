@@ -74,18 +74,16 @@ send_header(struct http_request *req, int code)
 }
 
 static int
-send_data(struct http_request *req, int fd, off_t file_size)
+send_data(struct http_request *req, int fd)
 {
 	// LAB 6: Your code here.
 	int r;
-	char buf[file_size];
-	if ((r = readn(fd, buf, file_size)) < file_size)
-		return r;
-
-	if (write(req->sock, buf, file_size) != file_size) {
-		die("Failed to send bytes to client");
+	char buf[BUFFSIZE];
+	while((r = read(fd, buf, sizeof(buf))) > 0){
+		if (write(req->sock, buf, r) != r) {
+			die("Failed to send bytes to client");
+		}
 	}
-
 	return 0;
 }
 
@@ -265,7 +263,7 @@ send_file(struct http_request *req)
 	if ((r = send_header_fin(req)) < 0)
 		goto end;
 
-	r = send_data(req, fd, file_size);
+	r = send_data(req, fd);
 
 end:
 	close(fd);

@@ -134,7 +134,7 @@ sys_e1000_try_receive(void* buffer, size_t len)
 {
 	// Force page fault in case the page(s) is marked as copy on write
 	// to avoid page fault in kernel mode
-	for (int i = 0; i < len; i += PGSIZE){
+	for (int i = 0; buffer + i < ROUNDUP(buffer + len, PGSIZE); i += PGSIZE){
 		uint8_t *p = buffer + i;
     	*(volatile uint8_t *) (buffer + i)= *p;
 	}

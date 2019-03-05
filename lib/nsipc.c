@@ -7,7 +7,6 @@
 // Virtual address at which to receive page mappings containing client requests.
 #define REQVA		0x0ffff000
 union Nsipc nsipcbuf __attribute__((aligned(PGSIZE)));
-union Nsipc nsipcinbuf[NIPCINBUF] __attribute__((aligned(PGSIZE)));
 
 // Send an IP request to the network server, and wait for a reply.
 // The request body should be in nsipcbuf, and parts of the response

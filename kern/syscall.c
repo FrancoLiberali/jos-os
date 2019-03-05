@@ -460,20 +460,17 @@ sys_e1000_try_transmit(void *packet, size_t len)
 // and updating RDT
 // Returns:
 //    -E_TRY_AGAIN if the receive queue is empty
-//    -E_INVAL if the recived buffer len is less than the RX_PACKET_LEN
+//    -E_NO_MEM if the recived buffer len is less than the packet len
 //    packet len > 0 otherwise
 // Destroys the environment on memory errors.
 static int
 sys_e1000_try_receive(void *u_buffer, size_t len)
 {
-	if (len < RX_PACKET_LEN) {
-		return -E_INVAL;
-	}
 	// Check that the user has permission to read and write
-	// [u_buffer, u_buffer + RX_PACKET_LEN).
+	// [u_buffer, u_buffer + len).
 	// Destroy the environment if not.
-	user_mem_assert(curenv, u_buffer, RX_PACKET_LEN, (PTE_P | PTE_U | PTE_W));
-	return e1000_try_receive(u_buffer);
+	user_mem_assert(curenv, u_buffer, len, (PTE_P | PTE_U | PTE_W));
+	return e1000_try_receive(u_buffer, len);
 }
 
 // Dispatches to the correct kernel function, passing the arguments.

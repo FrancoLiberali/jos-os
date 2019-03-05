@@ -5,10 +5,13 @@
 
 // LAB 6: Your driver code here
 volatile void *e1000;
-struct tx_desc *tx_desc_array;
-struct rx_desc *rx_desc_array;
-tx_packet_t *tx_buffers;
-rx_packet_t *rx_buffers;
+static struct tx_desc tx_desc_array[TX_NDESC]
+    __attribute__((aligned(16)));
+static tx_packet_t tx_buffers[TX_NDESC];
+
+static struct rx_desc rx_desc_array[RX_NDESC]
+    __attribute__((aligned(16)));
+static rx_packet_t rx_buffers[RX_NDESC];
 uint32_t actual_idx;
 
 static void
@@ -200,10 +203,11 @@ e1000_try_transmit(void *packet, uint32_t len)
 and updating RDT
 Returns:
     -E_TRY_AGAIN if the receive queue is empty
+	-E_NO_MEM if the recived buffer len is less than the packet len
     packet len > 0 otherwise
 */
 int
-e1000_try_receive(void *u_buffer)
+e1000_try_receive(void *u_buffer, size_t len)
 {
 	uint32_t rx_tail = getreg(E1000_RDT);
 	rx_tail++;
@@ -213,6 +217,8 @@ e1000_try_receive(void *u_buffer)
 	// The next one not used by e1000
 	if ((rx_desc_array[rx_tail].status & RDESC_STATUS_DD) != RDESC_STATUS_DD) {
 		return -E_TRY_AGAIN;
+	} else if (len < rx_desc_array[rx_tail].length) {
+		return -E_NO_MEM;
 	} else {
 		memmove(u_buffer,
 		        KADDR(rx_desc_array[rx_tail].addr),

@@ -125,11 +125,6 @@ typedef struct rx_packet {
 	char buffer[RX_PACKET_LEN];
 } rx_packet_t;
 
-extern struct tx_desc *tx_desc_array;
-extern struct rx_desc *rx_desc_array;
-extern tx_packet_t *tx_buffers;
-extern rx_packet_t *rx_buffers;
-
 #define TDESC_STATUS_DD 1 /* DD field in the status word (TDESC.STATUS)*/
 #define TDESC_CMD_RS_SET                                                       \
 	0x8 /* value in the command word (TDESC.CMD) to set RS bit to advise   \
@@ -161,5 +156,5 @@ struct rx_desc {
 
 int e1000_attachfn(struct pci_func *pcif);
 int e1000_try_transmit(void *packet, uint32_t len);
-int e1000_try_receive(void *u_buffer);
+int e1000_try_receive(void *u_buffer, size_t len);
 #endif  // JOS_KERN_E1000_H
